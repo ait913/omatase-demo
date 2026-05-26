@@ -39,7 +39,7 @@ function queryKeyFromCall(call: unknown[]) {
 }
 
 function expectInvalidated(invalidateSpy: ReturnType<typeof vi.spyOn>, queryKey: readonly unknown[]) {
-  expect(invalidateSpy.mock.calls.some((call) => JSON.stringify(queryKeyFromCall(call)) === JSON.stringify(queryKey))).toBe(true);
+  expect(invalidateSpy.mock.calls.some((call: unknown[]) => JSON.stringify(queryKeyFromCall(call)) === JSON.stringify(queryKey))).toBe(true);
 }
 
 describe("Mutation invalidate matrix (§7.11)", () => {

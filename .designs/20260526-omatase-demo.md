@@ -85,14 +85,15 @@ PC で開くと 375×812 のモバイル枠を画面中央配置 (`MobileFrame`)
 - 1 機能 MVP、共有型 1 ファイル (`src/shared/types.ts`) で済む
 - Vite が `src/` 配下のフロントを build、Hono が `src/server/` でサーバ起動、テストは `src/` 全体に Vitest
 - monorepo (turborepo / nx) を入れるほどの分量ではない
-- TypeScript の path alias で `@/shared/*` `@/server/*` `@/client/*` を切れば衝突しない
+- TypeScript の path alias で `@/shared/*` `@/server/*` `@/client/*` を切れば衝突しない (※ alias は **client 側のみ**、server は NodeNext で relative + `.js` 拡張子。詳細 §4.3.1)
 
 ### 4.2 ディレクトリ
 
 ```
 omatase-demo/
 ├── package.json
-├── tsconfig.json                         # 1 つ。paths で @ alias 定義
+├── tsconfig.json                         # client/共通用。moduleResolution=Bundler、paths で @ alias 定義
+├── tsconfig.server.json                  # server build 専用。module=NodeNext (詳細 §4.3.1)
 ├── vite.config.ts                        # @tailwindcss/vite plugin、API proxy 設定
 ├── vitest.config.ts                      # 環境別 (jsdom / node) で 2 project
 ├── drizzle.config.ts
@@ -232,6 +233,17 @@ omatase-demo/
 }
 ```
 
+#### 4.3.1 server build / TypeScript 設定 (NodeNext + `.js` 拡張子)
+
+`tsconfig.json` (root) は **client (Vite) 用** に最適化されており、別途 `tsconfig.server.json` を **server build 専用**に用意する。両者の整合性ミスでビルド時に import が解決できなくなる事故が発生しやすいので、以下を**規約として固定**:
+
+- `tsconfig.server.json`: `"module": "NodeNext"` + `"moduleResolution": "NodeNext"`、`outDir: "dist/server"`、`include: ["src/server/**/*", "src/shared/**/*"]`
+- `tsconfig.json` (root): client は Vite が bundler 解決するので `"moduleResolution": "Bundler"` のまま OK。`paths` で `"@/*": ["./src/*"]` alias 定義
+- **server source の relative import は全て `.js` 拡張子付き**で書く (例: `import { foo } from "../lib/foo.js"`)。`NodeNext` は ESM runtime 解決規則に従うため、`.ts` を書いても build 後の `.js` を import できない (TypeScript の rewrite はしない)
+- **server source では `@/*` alias を使わない**。NodeNext runtime は `tsconfig.paths` を解釈しない (node 標準 ESM resolver には paths 概念がない) ため、build 後の dist で `Cannot find module '@/shared/types'` になる
+- **client source では `@/*` alias を使ってよい** (Vite が解決する)
+- **shared (`src/shared/**`)** は client/server 双方から import される。server から見る時は relative + `.js` 拡張子、client から見る時は `@/shared/*` で書いてよい。shared 内部の相対 import は **`.js` 拡張子付き** で揃える (server build 経路で壊れないように)
+
 ### 4.4 Tailwind v4 構成 (CSS-first config)
 
 `vite.config.ts`:
@@ -339,8 +351,8 @@ export const verification = sqliteTable("verification", { /* ... */ });
 import {
   sqliteTable, text, integer, index, primaryKey,
 } from "drizzle-orm/sqlite-core";
-import { user } from "./auth-schema";
-import type { FeatureConfig, ChecklistState } from "@/shared/feature-config";
+import { user } from "./auth-schema.js";
+import type { FeatureConfig, ChecklistState } from "../../shared/feature-config.js";  // §4.3.1: server は alias 不可、relative + .js 必須
 
 /** イベント。1 ホスト + N ゲスト */
 export const event = sqliteTable("event", {
@@ -458,9 +470,16 @@ export const scheduleChatMessage = sqliteTable("schedule_chat_message", {
 
 `src/server/db/schema.ts` は全部 re-export するだけ (drizzle-kit 用):
 ```ts
-export * from "./auth-schema";
-export * from "./domain-schema";
+export * from "./auth-schema.js";       // §4.3.1: NodeNext、相対 + .js
+export * from "./domain-schema.js";
 ```
+
+#### 5.3.1 migration 生成規約
+
+- **生成コマンド**: `npx drizzle-kit generate` で `drizzle/<num>_<name>.sql` を生成 (自動採番、`db:generate` script で叩く)
+- **`-->statement-breakpoint` 区切りが必須**: 複数 DDL ステートメント (`CREATE TABLE` / `CREATE INDEX` / `ALTER TABLE` など) を 1 つの migration ファイルに書く場合、各ステートメントの**間に** `-->statement-breakpoint` コメント区切りを入れる。drizzle migrator (`migrate()`) はこの区切りで SQL を分割実行するため、区切りが無いと **先頭ステートメントしか実行されない** (better-sqlite3 の `exec` は単一ステートメント前提のため後続が無視される)
+- **drizzle-kit が自動生成する出力は既に区切り入り**なので、手書きで migration を編集する時のみ注意。手書きで追加した DDL が起動時 migration で反映されない場合、まず区切り抜けを疑う
+- **適用**: dev は `npm run db:migrate`、production は `src/server/index.ts` の起動時に `migrate(db, { migrationsFolder: "./drizzle" })` を呼ぶ (§10.5)
 
 ### 5.4 FeatureConfig (zod discriminated union)
 
@@ -586,6 +605,8 @@ export interface ScheduleWithFeaturesDTO extends ScheduleDTO {
 - 認可: Hono middleware で `c.var.user` を読み、必要 route で `requireUser()` / `requireHost(eventId)` を呼ぶ
 - 全 endpoint は `/api/` prefix。better-auth は `/api/auth/**` を専有
 - 時刻は **ISO8601 string で送受信** (JS の Date インスタンス化を明示的にする、TZ ズレ防止)
+- **datetime offset 規約**: 全 endpoint で datetime フィールドの zod schema は `z.string().datetime({ offset: true })` を使い、**UTC suffix `Z` と `±HH:MM` offset の両形式**を受け付ける (例: `2026-06-01T10:00:00Z` / `2026-06-01T19:00:00+09:00` のどちらも valid)。対象フィールド: `schedule.startAt` `schedule.endAt` `event.meetingAt` `progress.serverNow`、その他全 `Iso` 型の入出力
+- **client 運用ガイド**: `<input type="datetime-local">` から取得した値 (`"2026-06-01T19:00"` のような local naive 形式) は server に送る前に **`new Date(value).toISOString()` で UTC 化**する。生の local 文字列 (offset / Z なし) はバリデーション失敗 (`400 BAD_REQUEST`) として扱う
 
 ### 6.2 エラーコード一覧 (明示。example ではなく**全列挙**)
 
@@ -672,11 +693,12 @@ export interface ScheduleWithFeaturesDTO extends ScheduleDTO {
 
 ```ts
 // src/server/routes/events.ts
+// §4.3.1: server source は NodeNext。relative import に `.js` 拡張子必須、alias 不可。
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { requireUser, requireHost, requireMember } from "../lib/guard";
-import { AppError } from "../lib/error";
+import { requireUser, requireHost, requireMember } from "../lib/guard.js";
+import { AppError } from "../lib/error.js";
 
 const events = new Hono<AppEnv>();
 
@@ -705,8 +727,8 @@ export default events;
 ```ts
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { auth } from "./auth";
-import events from "./routes/events";
+import { auth } from "./auth.js";                  // §4.3.1
+import events from "./routes/events.js";
 // ... 他 routes
 
 type AppEnv = {
@@ -755,7 +777,7 @@ app.onError((err, c) => {
 `src/server/index.ts` (薄い wrapper):
 ```ts
 import { serve } from "@hono/node-server";
-import { app } from "./app";
+import { app } from "./app.js";                    // §4.3.1
 
 serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
   console.log(`[server] listening on :${info.port}`);
@@ -770,14 +792,34 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
 
 ### 7.1 認証 / 登録
 
+#### 7.1.0 `x-guest-name` のヘッダエンコード規約 (必読)
+
+`x-guest-name` は **percent-encoded UTF-8 文字列** として送る。これは合意済みの正規入力形式であり、生の UTF-8 文字列を直接ヘッダ値として送ってはいけない (raw マルチバイト文字を含めると 2 経路で壊れる)。
+
+- **Node fetch / undici**: HTTP ヘッダ値を Latin-1 (ByteString) として読む (RFC 7230 準拠)。UTF-8 を直接乗せると mojibake、もしくは `TypeError: Cannot convert argument to a ByteString` で送信不能
+- **Hono `app.request()`** (Vitest 経路): 内部で `new Headers()` を通すため、Latin-1 範囲外コードポイントは throw
+
+採用する規約:
+
+- **client 側 (`signInAsGuest`)**: ユーザー入力名を `encodeURIComponent(name)` で percent-encode してから `x-guest-name` に乗せる
+- **server 側 (`auth.ts` の `generateName(ctx)`)**: `headers.get("x-guest-name")` の戻り値を `decodeURIComponent(...)` で復号する。`URIError` が出る場合 (= percent-encoded ではない素の Latin-1 文字列が来た場合) は try/catch で raw 文字列をそのまま採用する fallback を入れる
+- **テスト helper (`loginAsGuest`)**: 同じく `encodeURIComponent` で送る。生の日本語文字列をヘッダに乗せる helper を書かない
+
+詳細根拠と Latin-1 判定 helper の参考実装: [[gotcha/hono-app-request-header-latin1-constraint]]
+
+#### 7.1.1 挙動マトリクス
+
+「ヘッダ値」列は **percent-encoded 後の実送信文字列** を示す。期待される `user.name` 列は server 側 `decodeURIComponent` 適用後の値。
+
 | # | 条件 | 期待挙動 |
 |---|---|---|
-| 7.1.1 | 未ログイン状態で `POST /api/auth/sign-in/anonymous` を `x-guest-name: たんり` ヘッダ付きで呼ぶ | `user.name = "たんり"`、`isAnonymous=true`、`email = <uuid>@omatase.local`、session cookie が `Set-Cookie` で返り、30 日有効 |
+| 7.1.1 | 未ログイン状態で `POST /api/auth/sign-in/anonymous` を `x-guest-name: %E3%81%9F%E3%82%93%E3%82%8A` (= `encodeURIComponent("たんり")`) ヘッダ付きで呼ぶ | `user.name = "たんり"`、`isAnonymous=true`、`email = <uuid>@omatase.local`、session cookie が `Set-Cookie` で返り、30 日有効 |
 | 7.1.2 | `x-guest-name` を付けずに `sign-in/anonymous` | `user.name = "ゲスト"` (fallback) で作成、それ以外は同じ |
 | 7.1.3 | `x-guest-name` の値が空文字 | `user.name = "ゲスト"` (fallback、空文字は `??` を通過するため `.trim()` で空判定し fallback に流す) |
-| 7.1.4 | `x-guest-name` の値が 80 文字超過 | 先頭 80 文字に truncate (UI 側も `maxLength=40` で守るが、防御的) |
+| 7.1.4 | `x-guest-name` に 80 文字超のユーザー名を percent-encode して送る | server で decode 後、先頭 80 文字に truncate (UI 側も `maxLength=40` で守るが、防御的)。truncate は **decoded codepoint 単位** で行う (percent-encoded 文字列の byte length ではない) |
 | 7.1.5 | 認証済み cookie 持参で `GET /api/auth/get-session` | session オブジェクト + user を返す |
 | 7.1.6 | 認証必須 route (`POST /api/events`) を cookie 無しで叩く | `401 UNAUTHENTICATED` |
+| 7.1.7 | `x-guest-name` に Latin-1 範囲内 ASCII (`alice`) を percent-encode せず raw で送る (legacy/curl 直叩きケース) | server 側 try/catch fallback により `user.name = "alice"` (decodeURIComponent 失敗時は raw 値採用) |
 
 ### 7.2 Event / Membership
 
@@ -882,23 +924,32 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
 
 すべて `refetchIntervalInBackground: false` を明示。`staleTime: 0`。
 
+**検証粒度 (Reviewer 向け規約)**: 上記 2 オプションは TanStack Query の default 値で意味的に成立する場合 (`refetchIntervalInBackground` の default は v5 で `false`) でも、各 `useQuery` の options object に **property として明示記載**する。テストはこの 2 property が options object の **own property として存在し、それぞれ `false` / `0` であること**を assert する (default 値で偶然成立しているのを valid 扱いしない)。意図の明示と将来 default 変更に対する防御を兼ねる。
+
 ### 7.11 Mutation → Invalidate マトリクス
 
-| Mutation | invalidate queryKey |
-|---|---|
-| `POST /api/events` | `QK.session`, `QK.event(newId)` |
-| `POST /api/events/:id/join` | `QK.event(id)`, `QK.members(id)`, `QK.session` |
-| `POST /api/events/:id/schedules` | `QK.schedules(eventId)`, `QK.progress(eventId)` |
-| `PATCH /api/schedules/:sid` | `QK.schedule(sid)`, `QK.schedules(eventId)`, `QK.progress(eventId)` |
-| `DELETE /api/schedules/:sid` | 同上 |
-| `POST /api/schedules/:sid/complete` | `QK.schedule(sid)`, `QK.schedules(eventId)`, `QK.progress(eventId)` |
-| `POST /api/schedules/:sid/features` | `QK.schedule(sid)`, `QK.progress(eventId)` |
-| `PATCH /api/features/:fid` | `QK.feature(fid)`, `QK.schedule(sid)`, `QK.progress(eventId)` |
-| `DELETE /api/features/:fid` | 同上 |
-| `PUT /api/features/:fid/state` | `QK.feature(fid)`, `QK.progress(eventId)` |
-| `POST /api/events/:id/announcements` | `QK.announcements(id)`, `QK.progress(id)` |
-| `POST /api/events/:id/chat` | `QK.eventChat(id)` |
-| `POST /api/schedules/:sid/chat` | `QK.scheduleChat(sid)` |
+**hook 命名規約 (Reviewer 向け、必読)**: 各 mutation は **専用の named hook** として `src/client/api/hooks/useApi.ts` から export する。命名は `use<Action><Resource>` 形式 (`useCreateEvent` / `useUpdateSchedule` / `useDeleteFeature` 等)。コンポーネント内に inline で `useMutation({...})` を直書きしない。
+
+理由:
+- テスト側は `vi.spyOn` で `useMutation` 呼び出しや `invalidateQueries` を捕まえて invalidate 挙動を検証する。inline `useMutation` だと spy の文脈 (どの hook 呼び出しか) が失われ、マトリクス検証が事実上不可能になる
+- 命名統一で reviewer は推測なしに `useUpdateSchedule` 等を import できる (heuristic な候補名探索を防ぐ)
+- 同じ mutation を複数コンポーネントから呼ぶ時のロジック重複を避ける
+
+| Mutation | hook (`src/client/api/hooks/useApi.ts`) | invalidate queryKey |
+|---|---|---|
+| `POST /api/events` | `useCreateEvent` | `QK.session`, `QK.event(newId)` |
+| `POST /api/events/:id/join` | `useJoinEvent` | `QK.event(id)`, `QK.members(id)`, `QK.session` |
+| `POST /api/events/:id/schedules` | `useCreateSchedule` | `QK.schedules(eventId)`, `QK.progress(eventId)` |
+| `PATCH /api/schedules/:sid` | `useUpdateSchedule` | `QK.schedule(sid)`, `QK.schedules(eventId)`, `QK.progress(eventId)` |
+| `DELETE /api/schedules/:sid` | `useDeleteSchedule` | 同上 |
+| `POST /api/schedules/:sid/complete` | `useCompleteSchedule` | `QK.schedule(sid)`, `QK.schedules(eventId)`, `QK.progress(eventId)` |
+| `POST /api/schedules/:sid/features` | `useCreateFeature` | `QK.schedule(sid)`, `QK.progress(eventId)` |
+| `PATCH /api/features/:fid` | `useUpdateFeature` | `QK.feature(fid)`, `QK.schedule(sid)`, `QK.progress(eventId)` |
+| `DELETE /api/features/:fid` | `useDeleteFeature` | 同上 |
+| `PUT /api/features/:fid/state` | `useUpdateFeatureState` | `QK.feature(fid)`, `QK.progress(eventId)` |
+| `POST /api/events/:id/announcements` | `useCreateAnnouncement` | `QK.announcements(id)`, `QK.progress(id)` |
+| `POST /api/events/:id/chat` | `useCreateEventChat` (alias: `useCreateMessage` for event chat) | `QK.eventChat(id)` |
+| `POST /api/schedules/:sid/chat` | `useCreateScheduleChat` | `QK.scheduleChat(sid)` |
 
 queryKey 集約は `src/client/api/queryKeys.ts` の `QK` object。`as const`。
 
@@ -912,8 +963,8 @@ queryKey 集約は `src/client/api/queryKeys.ts` の `QK` object。`as const`。
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { anonymous } from "better-auth/plugins";
-import { db } from "./db/client";
-import * as authSchema from "./db/auth-schema";
+import { db } from "./db/client.js";              // §4.3.1: NodeNext、相対 + .js
+import * as authSchema from "./db/auth-schema.js";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL!,           // dev: http://localhost:5173, prod: https://omatase.appily.run
@@ -927,8 +978,17 @@ export const auth = betterAuth({
     anonymous({
       emailDomainName: "omatase.local",            // <uuid>@omatase.local
       generateName: (ctx) => {
+        // §7.1.0 の規約: client は encodeURIComponent 済みの値を送ってくる前提
+        // (Node fetch / undici は Latin-1 ヘッダのみ通すため)。
+        // 古い経路 or curl 直叩きで素の ASCII が来た場合は decode が throw するので fallback で raw を採用。
         const raw = ctx.request?.headers.get("x-guest-name") ?? "";
-        const trimmed = raw.trim().slice(0, 80);
+        let decoded: string;
+        try {
+          decoded = decodeURIComponent(raw);
+        } catch {
+          decoded = raw;
+        }
+        const trimmed = decoded.trim().slice(0, 80);
         return trimmed.length > 0 ? trimmed : "ゲスト";
       },
     }),
@@ -953,8 +1013,10 @@ export const authClient = createAuthClient({
 });
 
 export async function signInAsGuest(name: string) {
+  // §7.1.0: HTTP ヘッダは Latin-1 制約があるため、UTF-8 名は percent-encode して送る。
+  // server 側 (auth.ts: generateName) で decodeURIComponent して復号。
   await authClient.signIn.anonymous({
-    fetchOptions: { headers: { "x-guest-name": name } },
+    fetchOptions: { headers: { "x-guest-name": encodeURIComponent(name) } },
   });
 }
 ```
@@ -966,9 +1028,9 @@ export async function signInAsGuest(name: string) {
 ```ts
 // src/server/lib/guard.ts
 import type { MiddlewareHandler } from "hono";
-import { AppError } from "./error";
-import { db } from "../db/client";
-import { membership } from "../db/domain-schema";
+import { AppError } from "./error.js";              // §4.3.1
+import { db } from "../db/client.js";
+import { membership } from "../db/domain-schema.js";
 import { and, eq } from "drizzle-orm";
 
 export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -1061,13 +1123,17 @@ export const requireHost: (eventIdParam: string) => MiddlewareHandler<AppEnv> =
     return `better-auth.session_token=${token}.${sig}`;
   }
   ```
-  もしくは、より素直な方法: **テスト中に `app.request("/api/auth/sign-in/anonymous", { method: "POST", headers: { "x-guest-name": "u1" } })` を叩いて Set-Cookie を取り出し、後続リクエストでそのまま転送**。helper はこちらを推奨 (better-auth の内部仕様変更に強い)。
+  もしくは、より素直な方法: **テスト中に `app.request("/api/auth/sign-in/anonymous", ...)` を叩いて Set-Cookie を取り出し、後続リクエストでそのまま転送**。helper はこちらを推奨 (better-auth の内部仕様変更に強い)。**§7.1.0 の規約に従い、name は `encodeURIComponent` してヘッダに乗せる** (raw 日本語を直接乗せると `app.request()` 内の `new Headers()` で Latin-1 制約に引っかかり `TypeError: Cannot convert argument to a ByteString`)。
   ```ts
   // helpers/auth-cookie.ts (推奨パス)
   export async function loginAsGuest(name: string): Promise<string /* cookie header */> {
     const res = await app.request("/api/auth/sign-in/anonymous", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-guest-name": name },
+      headers: {
+        "content-type": "application/json",
+        // §7.1.0: percent-encoded UTF-8 必須。raw 文字列は app.request 内 new Headers() で throw。
+        "x-guest-name": encodeURIComponent(name),
+      },
     });
     const setCookie = res.headers.get("set-cookie")!;
     // "better-auth.session_token=abc.def; Path=/; ..." → name=value のみ抜く
@@ -1123,8 +1189,22 @@ export const requireHost: (eventIdParam: string) => MiddlewareHandler<AppEnv> =
 ### 9.4 テストの最低カバレッジ
 
 - §7 の各行に最低 1 テスト
-- §7.11 invalidate マトリクスは、`vi.fn()` で `invalidateQueries` を mock してマトリクス通り呼ばれるか assert (各 mutation hook につき 1 it)
+- §7.11 invalidate マトリクスは、`vi.fn()` で `invalidateQueries` を mock してマトリクス通り呼ばれるか assert (各 mutation hook につき 1 it)。inline `useMutation` 禁止 (§7.11) なので `useApi.ts` の named export を `import * as api` で読み込んで spy する
+- §7.10 polling 検証 (`polling.test.tsx`) は `refetchIntervalInBackground` / `staleTime` が options object の own property として存在することを assert (§7.10 検証粒度参照)
 - snapshot テストは使わない
+
+#### 9.4.1 TanStack Query v5 型の使い分け
+
+`@tanstack/react-query` は v5 で型名が整理されている。テストで型を import する時の指針:
+
+| 用途 | v4 までの名前 (使わない) | **v5 で使う型** |
+|---|---|---|
+| `useQuery` に渡す options object の型 | `QueryOptions` | `UseQueryOptions<TData, TError, TSelect, TKey>` |
+| `useMutation` に渡す options object の型 | `MutationOptions` | `UseMutationOptions<TData, TError, TVars, TContext>` |
+| `queryClient.getQueryDefaults()` / `setQueryDefaults()` の戻り値・引数 | `QueryOptions` | `QueryObserverOptions` (内部 observer 設定) |
+| `queryClient.getMutationDefaults()` 系 | `MutationOptions` | `MutationObserverOptions` |
+
+`polling.test.tsx` / `invalidate-matrix.test.tsx` 等で options 型を直接参照する場合、上記 v5 の型を import する。`QueryOptions` / `MutationOptions` という素朴な名前は v5 では存在しない (または異なる semantics を持つ) ため、型エラーになったら命名表に立ち返る。
 
 ---
 

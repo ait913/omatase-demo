@@ -4,20 +4,29 @@ import { QK } from "@/client/api/queryKeys";
 import { renderApp } from "@/tests/helpers/render";
 import { eventId, installFetchMock, makeProgress, makeSchedule, scheduleId, setVisibilityState } from "./test-fixtures";
 
-function queryOptions(queryClient: QueryClient, queryKey: readonly unknown[]) {
+type PollingOptions = {
+  refetchInterval?:
+    | number
+    | false
+    | ((query: { state: { data?: unknown } }) => number | false);
+  refetchIntervalInBackground?: boolean;
+  staleTime?: number;
+};
+
+function queryOptions(queryClient: QueryClient, queryKey: readonly unknown[]): PollingOptions {
   const query = queryClient.getQueryCache().find({ queryKey });
   if (!query) throw new Error(`query not registered: ${JSON.stringify(queryKey)}`);
-  return query.options;
+  return query.options as PollingOptions;
 }
 
-function resolveInterval(options: ReturnType<typeof queryOptions>, data: unknown) {
+function resolveInterval(options: PollingOptions, data: unknown) {
   if (typeof options.refetchInterval === "function") {
-    return options.refetchInterval({ state: { data } } as never);
+    return options.refetchInterval({ state: { data } });
   }
   return options.refetchInterval;
 }
 
-function expectPolling(options: ReturnType<typeof queryOptions>, interval: number) {
+function expectPolling(options: PollingOptions, interval: number) {
   expect(options.refetchIntervalInBackground).toBe(false);
   expect(options.staleTime).toBe(0);
   setVisibilityState("visible");

@@ -8,7 +8,7 @@ OMATASE (URL 共有で待ち合わせ・イベント進行を管理するアプ�
 
 旧 `Muraki/projects/omatase-design-mock` (Plan時代の語彙・モックデータのみ) はアーカイブ的に保留。本 PJ は語彙・構造・実 DB が別物のため新規スラッグで切り直し。
 
-GitHub: <TODO: ait913/omatase-demo (新規)>
+GitHub: <https://github.com/ait913/omatase-demo>
 
 ## 主要ドキュメント
 
@@ -48,8 +48,9 @@ GitHub: <TODO: ait913/omatase-demo (新規)>
 
 ## デプロイ / 外部リソース
 
-- URL: <TODO>
-- Coolify app uuid: <TODO>
+- URL: <https://omatase-demo.appily.run>
+- Coolify app uuid: `r8qq615syv6mczmivsuttqoo`
+- Coolify project uuid: `nkaqu9lx6xewvzsvkadnmjcf` (Touri)
 - 関連 SKILL: [`appily`](../../.claude/skills/appily/SKILL.md)
 - Figma board: <https://www.figma.com/board/Ww2agroPoK9lCVd4LvT5sN/OMATASE>
 - Notion DB 叩き案 (Plan時代、要変換): <https://www.notion.so/mtg-1-35a6f41832f480e28966f52aeb165f0a>
