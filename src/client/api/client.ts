@@ -23,7 +23,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export async function signInAsGuest(name: string) {
   await api<unknown>("/api/auth/sign-in/anonymous", {
     method: "POST",
-    headers: { "x-guest-name": name },
+    headers: { "x-guest-name": encodeURIComponent(name) },
   });
 }
 
