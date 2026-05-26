@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+.designs
+.knowledge
+.env*
+*.log
