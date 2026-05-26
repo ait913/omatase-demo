@@ -24,6 +24,7 @@ export async function signInAsGuest(name: string) {
   await api<unknown>("/api/auth/sign-in/anonymous", {
     method: "POST",
     headers: { "x-guest-name": encodeURIComponent(name) },
+    body: "{}",
   });
 }
 
