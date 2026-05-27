@@ -21,6 +21,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export async function signInAsGuest(name: string) {
+  // 既存 anonymous session が残ってると better-auth が「再度 sign-in できない」と
+  // 200+skip で返し、古い (削除済かもしれない) user の cookie のまま後段の API が 401 になる。
+  // 確実に新規 session を取るため事前に sign-out で cookie を破棄する。
+  await fetch("/api/auth/sign-out", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+    credentials: "include",
+  }).catch(() => {});
   await api<unknown>("/api/auth/sign-in/anonymous", {
     method: "POST",
     headers: { "x-guest-name": encodeURIComponent(name) },
