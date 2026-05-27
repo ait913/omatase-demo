@@ -9,6 +9,7 @@ import type {
   ScheduleLocationDTO,
   ScheduleWithFeaturesDTO,
 } from "../../shared/types.js";
+import { computePeriod } from "../../shared/time.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { user } from "../db/auth-schema.js";
@@ -82,10 +83,10 @@ export async function aggregateFeature(row: FeatureRow, memberIds: string[]): Pr
       const state = s.state as { kind?: string; checkedInAt?: number | null };
       return state.kind === "meetup" && state.checkedInAt != null;
     }).length;
-    return { doneCount, totalMembers: memberIds.length };
+    return { doneCount, totalMembers: memberIds.length, allMembersDone: memberIds.length > 0 && doneCount === memberIds.length };
   }
   const config = row.config;
-  if (config.kind !== "checklist") return { doneCount: 0, totalMembers: memberIds.length };
+  if (config.kind !== "checklist") return { doneCount: 0, totalMembers: memberIds.length, allMembersDone: false };
   const required = config.items.filter((item) => item.required).map((item) => item.id);
   const perItem: Record<string, number> = {};
   for (const item of config.items) perItem[item.id] = 0;
@@ -96,7 +97,7 @@ export async function aggregateFeature(row: FeatureRow, memberIds: string[]): Pr
     for (const item of config.items) if (state.checked?.[item.id]) perItem[item.id] += 1;
     if (required.every((id) => state.checked?.[id])) doneCount += 1;
   }
-  return { doneCount, totalMembers: memberIds.length, perItem };
+  return { doneCount, totalMembers: memberIds.length, allMembersDone: memberIds.length > 0 && doneCount === memberIds.length, perItem };
 }
 
 export async function toScheduleDTO(row: ScheduleRow): Promise<ScheduleDTO> {
@@ -205,6 +206,10 @@ export async function scheduleChatDTOs(scheduleId: string, afterId?: string): Pr
 
 export async function schedulesForEvent(eventId: string) {
   return db.select().from(schedule).where(eq(schedule.eventId, eventId)).orderBy(asc(schedule.startAt), asc(schedule.position));
+}
+
+export async function periodForEvent(eventId: string) {
+  return computePeriod(await schedulesForEvent(eventId));
 }
 
 export async function assertMemberIds(eventId: string, ids: string[]) {

@@ -2,14 +2,13 @@ import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import { copyText } from "../lib/clipboard";
 import { Button } from "./Section";
+import { Sheet } from "./Sheet";
 
 export function ShareSheet({ url, onClose }: { url: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/30">
-      <div className="w-full max-w-[375px] rounded-t-3xl bg-surface p-6 shadow-md">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
-        <h2 className="mb-6 text-center text-xl font-bold">URL を共有</h2>
+    <Sheet open onDismiss={onClose} title="URL を共有">
+      <div>
         <div className="mx-auto grid size-[220px] place-items-center rounded-2xl border border-border bg-white">
           <QRCodeSVG value={url} size={190} />
         </div>
@@ -35,6 +34,6 @@ export function ShareSheet({ url, onClose }: { url: string; onClose: () => void 
           </Button>
         </div>
       </div>
-    </div>
+    </Sheet>
   );
 }

@@ -7,6 +7,12 @@ export const locationSchema = z.object({
   label: z.string().min(1).max(80),
 });
 
+export const periodSummarySchema = z.object({
+  startAt: z.string().datetime({ offset: true }),
+  endAt: z.string().datetime({ offset: true }),
+  sameDay: z.boolean(),
+});
+
 export const eventCreateSchema = z.object({
   name: z.string().min(1).max(80),
 });

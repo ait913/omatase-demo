@@ -15,6 +15,8 @@
   --font-sans: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
   --radius-2xl: 1rem;
   --radius-3xl: 1.5rem;
+  --spacing-touch: 44px;
+  --spacing-touch-lg: 48px;
 }
 
 html,

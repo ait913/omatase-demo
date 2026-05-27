@@ -2,7 +2,8 @@ import type { FeatureDTO } from "@/shared/types";
 import { useState } from "react";
 import { useCompleteSchedule, usePostScheduleChat, useScheduleChat } from "../api/hooks/useApi";
 import { ChatBox } from "./ChatBox";
-import { FeatureDetailSheet } from "./FeatureDetailSheet";
+import { ChecklistDoneBanner } from "./ChecklistDoneBanner";
+import { FeatureSettingsSheet } from "./FeatureSettingsSheet";
 import { Button } from "./Section";
 import type { ProgressDTO } from "@/shared/types";
 
@@ -41,22 +42,23 @@ export function ProgressView({ data }: { data: ProgressDTO }) {
             <span className="pb-1 tabular-nums">{new Date(current.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
           </div>
         </div>
-        {data.event.viewerIsHost && <a className="rounded-full bg-brand-100 px-3 py-2 text-brand-500" href={`/e/${data.event.id}`}>⌂</a>}
+        {data.event.viewerIsHost && <a className="grid min-h-11 min-w-11 place-items-center rounded-full bg-brand-100 text-brand-500" href={`/e/${data.event.id}`}>⌂</a>}
       </header>
+      {data.event.viewerIsHost &&
+        current.features
+          .filter((feature) => feature.kind === "checklist" && feature.aggregate?.allMembersDone)
+          .map((feature) => <ChecklistDoneBanner key={feature.id} eventId={data.event.id} feature={feature} onOpen={() => setSelected(feature)} />)}
       {data.latestAnnouncement && <div className="rounded-2xl border border-border bg-surface p-4 text-sm">{data.latestAnnouncement.body}</div>}
       <section className="space-y-2">
         <h3 className="text-sm font-bold text-ink-500">機能</h3>
-        <div className="flex flex-wrap gap-2">
-          {current.features.map((feature) => (
-            <button key={feature.id} className="rounded-full bg-brand-100 px-3 py-2 text-sm font-bold text-brand-500" onClick={() => setSelected(feature)}>
-              {feature.kind === "meetup" ? "📍 集合" : "☑ 持ち物"}
-            </button>
-          ))}
-        </div>
         {current.features.map((feature) => (
-          <button key={feature.id} onClick={() => setSelected(feature)} className="w-full rounded-2xl border border-border bg-surface p-4 text-left">
-            <span className="font-bold">{feature.kind === "meetup" ? "集合" : "持ち物"}</span>
-            <span className="float-right text-sm text-ink-500">{feature.aggregate?.doneCount ?? 0}/{feature.aggregate?.totalMembers ?? 0}</span>
+          <button key={feature.id} onClick={() => setSelected(feature)} className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-border bg-surface px-4 text-left transition-colors active:bg-brand-100">
+            <span>{feature.kind === "meetup" ? "📍" : "☑"}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold">{feature.kind === "meetup" ? "集合" : "持ち物確認"}</span>
+              <span className="block truncate text-sm text-ink-500">{feature.aggregate?.doneCount ?? 0}/{feature.aggregate?.totalMembers ?? 0} {feature.kind === "meetup" ? "人集合済み" : "人完了"}</span>
+            </span>
+            <span className="text-ink-500">›</span>
           </button>
         ))}
       </section>
@@ -71,11 +73,11 @@ export function ProgressView({ data }: { data: ProgressDTO }) {
         <ChatBox messages={chat.data?.messages ?? []} pending={postChat.isPending} onSend={(body) => postChat.mutate(body)} />
       </section>
       <div className="grid grid-cols-3 gap-2">
-        <Button variant="soft" disabled={!data.prev}>← 前へ</Button>
-        <Button disabled={complete.isPending} onClick={() => complete.mutate()}>完了</Button>
-        <Button variant="soft" disabled={!data.next}>次→</Button>
+        <Button className="min-h-12" variant="soft" disabled={!data.prev}>← 前へ</Button>
+        <Button className="min-h-12" disabled={complete.isPending} onClick={() => complete.mutate()}>完了</Button>
+        <Button className="min-h-12" variant="soft" disabled={!data.next}>次→</Button>
       </div>
-      {selected && <FeatureDetailSheet eventId={data.event.id} schedule={current} feature={selected} onClose={() => setSelected(null)} />}
+      {selected && <FeatureSettingsSheet open eventId={data.event.id} schedule={current} feature={selected} mode="runtime" onDismiss={() => setSelected(null)} viewerIsHost={data.event.viewerIsHost} />}
     </div>
   );
 }

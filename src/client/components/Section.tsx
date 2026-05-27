@@ -20,14 +20,14 @@ export function Button({ children, variant = "primary", ...props }: React.Button
         ? "bg-brand-100 text-brand-500"
         : "bg-transparent text-ink-900";
   return (
-    <button {...props} className={`rounded-full px-4 py-2 text-sm font-bold disabled:opacity-50 ${cls} ${props.className ?? ""}`}>
+    <button {...props} className={`min-h-11 min-w-11 rounded-full px-4 py-2 text-sm font-bold disabled:opacity-50 ${cls} ${props.className ?? ""}`}>
       {children}
     </button>
   );
 }
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`w-full rounded-2xl border border-border bg-surface px-4 py-3 outline-none focus:border-brand-500 ${props.className ?? ""}`} />;
+  return <input {...props} className={`min-h-11 w-full rounded-2xl border border-border bg-surface px-4 py-3 outline-none focus:border-brand-500 ${props.className ?? ""}`} />;
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {

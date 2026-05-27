@@ -28,7 +28,7 @@ export interface FeatureSummaryDTO {
   id: string;
   kind: "meetup" | "checklist";
   position: number;
-  summary: { doneCount: number; totalMembers: number };
+  summary: { doneCount: number; totalMembers: number; allMembersDone: boolean };
 }
 
 export interface ScheduleDTO {
@@ -55,6 +55,7 @@ export interface FeatureDTO {
   aggregate?: {
     doneCount: number;
     totalMembers: number;
+    allMembersDone: boolean;
     perItem?: Record<string, number>;
   };
 }
@@ -79,6 +80,19 @@ export interface ScheduleWithFeaturesDTO extends ScheduleDTO {
   features: FeatureDTO[];
 }
 
+export interface PeriodSummaryDTO {
+  startAt: Iso;
+  endAt: Iso;
+  sameDay: boolean;
+}
+
+export interface EventDetailDTO {
+  event: EventDTO;
+  members: MemberDTO[];
+  viewerIsMember: boolean;
+  period: PeriodSummaryDTO | null;
+}
+
 export interface ProgressDTO {
   event: EventDTO;
   members: MemberDTO[];
@@ -86,5 +100,6 @@ export interface ProgressDTO {
   prev: ScheduleDTO | null;
   next: ScheduleDTO | null;
   latestAnnouncement: AnnouncementDTO | null;
+  period: PeriodSummaryDTO | null;
   serverNow: Iso;
 }

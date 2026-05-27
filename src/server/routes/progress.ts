@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/client.js";
 import { event } from "../db/domain-schema.js";
-import { announcementDTOs, loadMembers, schedulesForEvent, toEventDTO, toScheduleDTO, toScheduleWithFeaturesDTO } from "../lib/dto.js";
+import { announcementDTOs, loadMembers, periodForEvent, schedulesForEvent, toEventDTO, toScheduleDTO, toScheduleWithFeaturesDTO } from "../lib/dto.js";
 import { AppError } from "../lib/error.js";
 import { getRoleOrThrow, requireUser } from "../lib/guard.js";
 import type { AppEnv } from "../lib/types.js";
@@ -37,6 +37,7 @@ progress.get("/events/:eventId/progress", requireUser, async (c) => {
     prev: prev ? await toScheduleDTO(prev) : null,
     next: next ? await toScheduleDTO(next) : null,
     latestAnnouncement,
+    period: await periodForEvent(eventId),
     serverNow: now.toISOString(),
   });
 });

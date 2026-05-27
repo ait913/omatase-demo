@@ -8,6 +8,8 @@ import { ScheduleEditSheet } from "../components/ScheduleEditSheet";
 import { ScheduleList } from "../components/ScheduleList";
 import { Section, Button } from "../components/Section";
 import { ShareSheet } from "../components/ShareSheet";
+import { PeriodBanner } from "../components/PeriodBanner";
+import type { ScheduleDTO } from "@/shared/types";
 
 export function EventHomeRoute() {
   const { eventId } = useParams({ strict: false }) as { eventId: string };
@@ -21,6 +23,7 @@ export function EventHomeRoute() {
   const postChat = usePostEventChat(eventId);
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState<ScheduleDTO | null>(null);
 
   useEffect(() => {
     if (event.isError) navigate({ to: "/e/$eventId/join", params: { eventId } });
@@ -36,14 +39,17 @@ export function EventHomeRoute() {
   return (
     <div className="space-y-6 p-5">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{event.data?.event.name ?? "イベント"}</h1>
-        <button className="rounded-full px-3 py-2 text-xl" onClick={() => setShareOpen(true)}>⋯</button>
+        <div>
+          <h1 className="text-2xl font-bold">{event.data?.event.name ?? "イベント"}</h1>
+          <PeriodBanner period={event.data?.period ?? progress.data?.period ?? null} />
+        </div>
+        <button className="min-h-11 min-w-11 rounded-full px-3 py-2 text-xl" onClick={() => setShareOpen(true)}>⋯</button>
       </header>
       <Section title="アナウンス">
         <AnnouncementBoard eventId={eventId} latest={latest} canPost={isHost} />
       </Section>
-      <Section title="スケジュール" action={isHost ? <button className="text-xl text-brand-500" onClick={() => setEditOpen(true)}>+</button> : null}>
-        <ScheduleList schedules={schedules.data?.schedules ?? []} />
+      <Section title="スケジュール" action={isHost ? <button className="min-h-11 min-w-11 rounded-full bg-brand-100 text-xl font-bold text-brand-500" onClick={() => setEditOpen(true)}>+</button> : null}>
+        <ScheduleList schedules={schedules.data?.schedules ?? []} onSelect={(schedule) => setSelectedSchedule(schedule)} />
       </Section>
       <Section title="メンバー">
         <div className="flex gap-2">{(members.data?.members ?? event.data?.members ?? []).slice(0, 6).map((m) => <Avatar key={m.userId} name={m.name} />)}</div>
@@ -53,7 +59,8 @@ export function EventHomeRoute() {
       </Section>
       {progress.data?.current && <Button className="w-full" onClick={() => navigate({ to: "/e/$eventId/progress", params: { eventId } })}>▶ 進行を見る</Button>}
       {shareOpen && <ShareSheet url={`${window.location.origin}/e/${eventId}/join`} onClose={() => setShareOpen(false)} />}
-      {editOpen && <ScheduleEditSheet eventId={eventId} onClose={() => setEditOpen(false)} />}
+      {editOpen && <ScheduleEditSheet eventId={eventId} mode="create" onClose={() => setEditOpen(false)} />}
+      {selectedSchedule && <ScheduleEditSheet eventId={eventId} schedule={selectedSchedule} mode={isHost ? "edit" : "readonly"} onClose={() => setSelectedSchedule(null)} />}
     </div>
   );
 }

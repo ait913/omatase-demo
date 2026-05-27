@@ -20,9 +20,10 @@ URL ひとつで「待ち合わせ → 当日の進行」を全員でなぞれ�
 2. イベント作成 `/create` で **イベント名 + 自分の表示名** を入力 (`signIn.anonymous` でホストも匿名ユーザー化)
 3. 集合場所/時刻設定 `/create/where` で **集合場所 (地図ピンドラッグ)** と **開始時刻** を決める。これが最初の Schedule (`name=集合, kind=meetup feature 自動付与`) として保存
 4. イベントホーム `/e/:eventId` (管理者版) — アナウンス textarea / Schedule 一覧 / メンバー / Event チャット / 「URL 共有」ボタン
-5. Schedule 追加: `+` → Schedule 編集モーダル (`<ScheduleEditSheet>`) で名前・時刻・場所・メモ・参加メンバー・Feature を追加 (集合 / 持ち物確認をトグル)
-6. URL 共有モーダル (`<ShareSheet>`) で QR と URL コピー
-7. 開始時刻が来ると、ホストは **通常通りイベントホームに着地** (管理操作優先のため切替なし、進行ページへは "▶ 進行を見る" で遷移可)
+5. Schedule 追加: ホーム右上の **44pt 以上** の `+` ボタン → Schedule 編集モーダル (`<ScheduleEditSheet>`) で名前・時刻・場所・メモ・参加メンバー・機能を入力。場所欄タップで共通の `<LocationPickerSheet>` (検索 + 地図 + 現在地)。機能は右上 `+` から `<FeatureCatalogSheet>` (機能一覧) を開き選択追加 → 追加された機能カードをタップして `<FeatureSettingsSheet>` で個別設定
+6. Schedule 編集: ホームのスケジュール行カード (`tap target ≥ 60px`) をタップ → 同 `<ScheduleEditSheet>` を `mode=edit` で開き編集/削除可
+7. URL 共有モーダル (`<ShareSheet>`) で QR と URL コピー
+8. 開始時刻が来ると、ホストは **通常通りイベントホームに着地** (管理操作優先のため切替なし、進行ページへは "▶ 進行を見る" で遷移可)
 
 ### 2.2 ゲスト動線
 
@@ -33,7 +34,7 @@ URL ひとつで「待ち合わせ → 当日の進行」を全員でなぞれ�
 ### 2.3 進行時動線 (全員共通)
 
 1. 進行ページ `/e/:eventId/progress` は **「現在の Schedule (`start_at ≦ now < end_at`)」を 1 画面** に表示
-2. Feature (集合 / 持ち物確認) は折り畳んだチップで現れ、タップで `<FeatureDetailSheet>` 展開
+2. Feature (集合 / 持ち物確認) は折り畳んだカードで現れ、タップで `<MeetupSheet>` / `<ChecklistSheet>` 展開 (進行モード、`mode="runtime"`)。`<FeatureSettingsSheet>` は **設定モード (`mode="config"`)** のラッパで、進行ページからは展開しない (Schedule 編集モーダル経由のみ)
 3. 次の Schedule (上端ヘッダ下) / 前の Schedule (左フリック or 「← 前へ」) を切替可能
 4. 「完了」ボタンでホスト/メンバー誰でも前倒し完了可 (status = completed、自動で次の Schedule に遷移)
 5. Schedule 内チャット (`<ScheduleChat>`) は 2 秒 polling
@@ -74,6 +75,46 @@ URL ひとつで「待ち合わせ → 当日の進行」を全員でなぞれ�
 ### 3.4 モバイル枠 (PC 表示時)
 
 PC で開くと 375×812 のモバイル枠を画面中央配置 (`MobileFrame`)。背景は `#EEEEEC`、フレームは `rounded-3xl shadow-md`。モバイルでは全面。**旧 mock の `MobileFrame` `Avatar` は流用、`MapSection` は依存揃ってるので流用、`ChatBox` は UI 殻のみ参考 (ロジック書き直し)**。
+
+### 3.5 タップターゲット規約 (WCAG 2.5.5 / Apple HIG)
+
+- **interactive 要素の最小寸法: 44×44 pt** (Apple HIG, WCAG 2.5.5 Level AAA に準拠)。ボタン、アイコンボタン、トグル、チップ、リンクすべてに適用
+- 主要 CTA (`+` ボタン、保存ボタン、決定ボタン): **48×48 pt 以上** を目安に余裕を持つ
+- **タップ可能なカード** (スケジュール行、Feature カード、メンバー行): **行高 60px 以上** を確保し、active 時に `bg-brand-100` で feedback。`cursor-pointer` + `transition-colors` を必須
+- 隣接 interactive 要素の **間隔最小 8px** (`gap-2`)。`+` ボタンと同一行に置く要素は `gap-3` (12px) 推奨
+- **静的「指摘」**: 旧設計に存在した「右上 [⋯]」「`+` chip」等のサイズ無指定は本規約で **44pt 最低保証**へ統一。Tailwind では `min-w-11 min-h-11` (= 44px) を Reviewer がテストする
+
+### 3.6 モーダル / Sheet 共通規約
+
+すべての Modal / Sheet (`<Modal>`, `<Sheet>`) は以下を **3 種すべて** 満たす:
+
+1. **overlay (空白) tap で close** — 背景の dim layer (`bg-black/40 backdrop-blur-[2px]`) をタップ → onDismiss 発火
+2. **ESC キーで close** — `keydown` listener、`document.body` レベル
+3. **右上 × ボタン (`<CloseButton>`、44×44 pt)** — 視覚的な明示。タップ → onDismiss 発火
+
+例外: **destructive な未保存変更を持つ Sheet** (例: Schedule 編集で title 変更後) は overlay tap で **「破棄しますか?」確認 prompt** を挟む。ESC / × も同じ confirm 経路。確認 prompt 自体は `window.confirm` で良い (MVP 簡略化)。
+
+実装方針: 上記を全 Modal/Sheet が個別実装すると規約逸脱が起きるため、`<Modal>` / `<Sheet>` を **基底コンポーネント** として `src/client/components/Modal.tsx` / `Sheet.tsx` に置き、`<ScheduleEditSheet>` 等は内部で `<Sheet>` を使う。基底コンポーネントの責務:
+
+- `<Modal>` (中央配置、画面 60-80% 占有): `/e/.../join` の警告系・URL コピー後 toast、確認 prompt 等
+- `<Sheet>` (画面下からスライドアップ、`rounded-t-3xl`、画面 80-95% 占有): 編集系・場所選択・機能一覧。MD3 Bottom Sheet ガイドラインに従う
+
+z-index 規約: 全 Modal/Sheet で `z-[1100]` ([leaflet z-index gotcha](../../../knowledge/gotcha/leaflet-zindex-vs-modal.md))。overlay は `z-[1099]`。**Sheet on Sheet** (例: ScheduleEditSheet の上に LocationPickerSheet) の場合、内側 Sheet は `z-[1110]`、その overlay は `z-[1109]` で重ねる。stack 深さは MVP では最大 2 (Sheet 上に Sheet) を許可、それ以上禁止。
+
+`<Sheet>` API (TS):
+```ts
+interface SheetProps {
+  open: boolean;
+  onDismiss: () => void;              // overlay/ESC/× 共通
+  title?: string;                     // header に表示
+  rightAction?: { label: string; onClick: () => void; intent?: "primary"|"plain" };  // 「保存」等
+  dismissConfirm?: () => boolean | Promise<boolean>;  // 「未保存変更あり時の confirm」、true で実 close
+  children: React.ReactNode;
+  stackLevel?: 1 | 2;                 // z-index 制御。default=1
+}
+```
+
+`<Modal>` も同様 API。詳細仕様は本書 §12.13 参照。
 
 ---
 
@@ -146,14 +187,22 @@ omatase-demo/
 │   │   │   └── hooks/                    # useEvent / useSchedules / useProgress / useChat / ...
 │   │   ├── components/
 │   │   │   ├── MobileFrame.tsx           # 旧 mock 流用
-│   │   │   ├── MapSection.tsx            # 旧 mock 流用 (react-leaflet ラッパ)
+│   │   │   ├── MapSection.tsx            # 旧 mock 流用 (react-leaflet ラッパ、static 表示用)
 │   │   │   ├── Avatar.tsx                # 旧 mock 流用
-│   │   │   ├── ScheduleList.tsx
-│   │   │   ├── ScheduleEditSheet.tsx     # 編集モーダル
-│   │   │   ├── FeatureDetailSheet.tsx    # 集合 / 持ち物の中身
+│   │   │   ├── Modal.tsx                 # 共通: overlay tap/ESC/× で close (§3.6)
+│   │   │   ├── Sheet.tsx                 # 共通 BottomSheet: 同上 (§3.6)
+│   │   │   ├── PeriodBanner.tsx          # イベント期間表示 (§12.4)
+│   │   │   ├── ScheduleList.tsx          # 行カード (tap で edit Sheet) (§12.4)
+│   │   │   ├── ScheduleEditSheet.tsx     # 編集モーダル (新規/編集兼用) (§12.6)
+│   │   │   ├── FeatureCatalogSheet.tsx   # 機能一覧モーダル (右上 + から) (§12.6.4)
+│   │   │   ├── FeatureSettingsSheet.tsx  # 設定モード dispatcher (kind 別に Meetup/Checklist Sheet を呼ぶ) (§12.7/§12.8)
+│   │   │   ├── MeetupSheet.tsx           # 集合 (mode: "config" | "runtime") (§12.7)
+│   │   │   ├── ChecklistSheet.tsx        # 持ち物 (mode: "config" | "runtime") (§12.8)
+│   │   │   ├── LocationPickerSheet.tsx   # 場所検索 + 地図 + 現在地、共通モーダル (§12.12)
 │   │   │   ├── AnnouncementBoard.tsx
 │   │   │   ├── ChatBox.tsx               # 殻のみ流用、polling は hook 側
 │   │   │   ├── ShareSheet.tsx            # QR + コピー
+│   │   │   ├── ChecklistDoneBanner.tsx   # 全員チェック完了の管理者向け通知 (§12.9.1, §7.5.10)
 │   │   │   ├── ProgressView.tsx
 │   │   │   └── ...
 │   │   └── lib/
@@ -566,8 +615,13 @@ export interface ScheduleDTO {
 }
 export interface FeatureSummaryDTO {
   id: string; kind: "meetup"|"checklist"; position: number;
-  /** 集計 (例: checklist は `{ doneCount, totalMembers }`, meetup は `{ checkedInCount, totalMembers }`) */
-  summary: { doneCount: number; totalMembers: number };
+  /**
+   * 集計: 全 kind 共通で `doneCount`/`totalMembers` を返し、`allMembersDone` (全員完了) フラグも返す。
+   * - checklist: `doneCount` = required アイテムすべて true な member 数、`allMembersDone` = `doneCount === totalMembers` (totalMembers>0 の時のみ)
+   * - meetup:    `doneCount` = `checkedInAt !== null` な member 数、`allMembersDone` 同上
+   * バナー表示 (§7.5.10) は **`kind="checklist"` かつ `allMembersDone=true`** を条件とする。
+   */
+  summary: { doneCount: number; totalMembers: number; allMembersDone: boolean };
 }
 export interface FeatureDTO {
   id: string; scheduleId: string; kind: "meetup"|"checklist"; position: number;
@@ -578,6 +632,14 @@ export interface FeatureDTO {
 export interface ChatMessageDTO { id: string; authorUserId: string; authorName: string; body: string; createdAt: Iso; }
 export interface AnnouncementDTO { id: string; authorUserId: string; authorName: string; body: string; createdAt: Iso; }
 
+/** イベント期間バナー (§12.4) 用。schedule 0 件なら null */
+export interface PeriodSummaryDTO {
+  startAt: Iso;          // min(schedules.startAt)
+  endAt:   Iso;          // max(schedules.endAt)
+  /** 同一日判定済みフラグ (server で計算済み)。client は表示分岐に使うだけ */
+  sameDay: boolean;
+}
+
 /** /api/events/:id/progress 集約レスポンス (進行ページ 1 リクで全部取る) */
 export interface ProgressDTO {
   event: EventDTO;
@@ -586,6 +648,8 @@ export interface ProgressDTO {
   prev:    ScheduleDTO | null;
   next:    ScheduleDTO | null;
   latestAnnouncement: AnnouncementDTO | null;
+  /** 全 Schedule 共通の期間バナー source (§12.4) */
+  period: PeriodSummaryDTO | null;
   serverNow: Iso;
 }
 export interface ScheduleWithFeaturesDTO extends ScheduleDTO {
@@ -640,7 +704,7 @@ export interface ScheduleWithFeaturesDTO extends ScheduleDTO {
 | Method | Path | auth | body / params | response |
 |---|---|---|---|---|
 | POST | `/api/events` | user | `{ name: string }` | `201 { event: EventDTO }`。**呼び出しユーザーが自動で host membership 取得**、最初の Schedule (`name="集合"`) は **作らない** (`/create/where` 後の `POST /schedules` で作る) |
-| GET  | `/api/events/:eventId` | user (member or 公開) | — | `200 { event: EventDTO; members: MemberDTO[]; viewerIsMember: boolean }`。**非メンバーが叩いても OK** (これにより `/join` 画面でイベント名を出せる)、ただし `viewerIsMember=false` の時 schedules/chat 等は別 endpoint で 403 |
+| GET  | `/api/events/:eventId` | user (member or 公開) | — | `200 { event: EventDTO; members: MemberDTO[]; viewerIsMember: boolean; period: PeriodSummaryDTO\|null }`。**非メンバーが叩いても OK** (これにより `/join` 画面でイベント名を出せる)、ただし `viewerIsMember=false` の時 schedules/chat 等は別 endpoint で 403。`period` は schedule 集計のため非 member でも返す (Phase 2 で隠蔽可) |
 | POST | `/api/events/:eventId/join` | user | — | `200 { membership: MemberDTO }`。`x-guest-name` 不要 (登録時に注入済み)。既参加なら `409 ALREADY_MEMBER` |
 | GET  | `/api/events/:eventId/members` | member | — | `200 { members: MemberDTO[] }` |
 
@@ -870,6 +934,10 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
 | 7.5.7 | meetup の「集合済み」: `state.checkedInAt !== null` な member 数 |
 | 7.5.8 | host が `DELETE /api/features/:id` | `204`、`schedule_feature` + cascade で `schedule_feature_state` 行も消える |
 | 7.5.9 | member (非 host) が `POST /features` or `DELETE /features` | `403 FORBIDDEN_NOT_HOST` |
+| 7.5.10 | `current.features[*]` の `summary.allMembersDone` 計算: `totalMembers > 0` かつ `doneCount === totalMembers` で `true`。`totalMembers=0` (= 該当 schedule の対象メンバーが空、想定外) は `false` |
+| 7.5.11 | **host が `/progress` を開いたとき**、`current.features` 中に `kind="checklist"` かつ `summary.allMembersDone=true` の feature が 1 件以上ある場合、UI 上部に **`<ChecklistDoneBanner>`** を表示。バナーは feature 名を含む (例: 「持ち物確認: 全員完了!」) |
+| 7.5.12 | 同条件を `member` (非 host) が満たした場合、バナーは **表示しない** (host 専用通知) |
+| 7.5.13 | host が `<ChecklistDoneBanner>` を dismiss 押下 | sessionStorage に `dismissed_<featureId>=true` を立て、再表示しない。次の `current` schedule (feature ID が変わる) では復活 |
 
 ### 7.6 Announcement
 
@@ -897,8 +965,10 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
 |---|---|---|
 | 7.8.1 | member が `GET /api/events/:id/progress` | `200 ProgressDTO`、§7.3 の判定で current 決定 |
 | 7.8.2 | レスポンスに `serverNow` を必ず含む | クライアントが時刻計算に使う |
-| 7.8.3 | `current.features[*]` には呼び出しユーザーの state + aggregate を同梱 (1 リクで FeatureDetailSheet 開けるよう先読み) |
+| 7.8.3 | `current.features[*]` には呼び出しユーザーの state + aggregate を同梱 (1 リクで `<MeetupSheet>` / `<ChecklistSheet>` を `mode="runtime"` で開けるよう先読み) |
 | 7.8.4 | 非 member | `403 FORBIDDEN_NOT_MEMBER` |
+| 7.8.5 | `period` フィールド計算: schedule 0 件 → `null`。1 件以上 → `{ startAt: min(startAt), endAt: max(endAt), sameDay: true/false }`。`sameDay` 判定は **JST 基準** (`Asia/Tokyo`) で `YYYY-MM-DD` が一致するか。MVP は JST 固定 (国内デモ前提) |
+| 7.8.6 | `period` は `current` 判定や `status` を問わず**全 schedule** を集計対象とする (completed も含む) |
 
 ### 7.9 クライアントルーティング (リダイレクト挙動)
 
@@ -910,6 +980,9 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
 | 7.9.4 | ログイン済み・**host** で `/e/:eventId`、active schedule あり | リダイレクトしない (ホームに留まる、ヘッダの「▶ 進行を見る」で手動遷移) |
 | 7.9.5 | `/e/:eventId/progress` を開いたが active schedule 無し | "イベント開始前" or "全 Schedule 完了" の空状態 UI |
 | 7.9.6 | 共有 URL `/e/:eventId/join` を未ログインで開く | 名前入力フォーム → submit で `signIn.anonymous` → join → イベントホームへ |
+| 7.9.7 | host がホーム (`/e/:eventId`) で Schedule 行カードをタップ | `<ScheduleEditSheet mode="edit" scheduleId={id}>` を open。閉じる時は §3.6 共通規約 (overlay/ESC/×)、未保存変更ありなら確認 prompt |
+| 7.9.8 | member (非 host) が同じ Schedule 行カードをタップ | 読み取り専用ダイアログ (`<ScheduleEditSheet mode="readonly">`) で詳細表示。編集 UI は非表示、Feature カードはタップ可 (進行ページと同じ `runtime` モードで開く) |
+| 7.9.9 | host が `<ScheduleEditSheet mode="edit">` 内で「削除」を押下 | confirm prompt → `DELETE /api/schedules/:id` → close、ホームの schedules リスト invalidate |
 
 ### 7.10 polling 周期 / 停止条件 (TanStack Query)
 
@@ -952,6 +1025,50 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) }, (info) => {
 | `POST /api/schedules/:sid/chat` | `useCreateScheduleChat` | `QK.scheduleChat(sid)` |
 
 queryKey 集約は `src/client/api/queryKeys.ts` の `QK` object。`as const`。
+
+### 7.12 共通モーダル / Sheet 挙動 (§3.6 規約のテスト根拠)
+
+| # | 条件 | 期待挙動 |
+|---|---|---|
+| 7.12.1 | `<Modal open onDismiss={fn}>` の overlay (背景 dim layer) をタップ | `onDismiss` が 1 回呼ばれる |
+| 7.12.2 | `<Modal>` open 中に `Escape` キー押下 | `onDismiss` が 1 回呼ばれる |
+| 7.12.3 | `<Modal>` 右上 `×` ボタン (data-testid="modal-close") をタップ | `onDismiss` が 1 回呼ばれる |
+| 7.12.4 | overlay tap / ESC / × の **3 経路すべて**同じ `onDismiss` を呼ぶ (実装が分岐しないこと) | 各経路で 1 回ずつ、引数なし |
+| 7.12.5 | `<Modal dismissConfirm={async () => false} ...>` で上記 3 経路発火 | `onDismiss` は呼ばれない (confirm が false 返却で抑止) |
+| 7.12.6 | `<Modal dismissConfirm={async () => true} ...>` で同 | `onDismiss` が呼ばれる |
+| 7.12.7 | `<Modal open={false}>` | DOM に **render されない** (`null` 返却、portal にも残らない) |
+| 7.12.8 | `<Sheet>` も上記 7.12.1-7.12.7 と同一挙動 (基底テストを共有) |
+| 7.12.9 | `<Sheet stackLevel={2}>` を上に開く | z-index は `1110`、overlay は `1109`。背後の `stackLevel=1` Sheet (`z=1100`) は残る (close されない)。stackLevel=2 を close すると stackLevel=1 が再 active |
+| 7.12.10 | open 中はページ body スクロール禁止 (`overflow-hidden`)、close で解除 |
+| 7.12.11 | open 直後、内部の最初の focusable 要素 (input or `×` ボタン) に focus が当たる |
+| 7.12.12 | `Tab` キーで focus が Sheet 内を循環 (focus trap) |
+
+### 7.13 LocationPickerSheet 挙動
+
+| # | 条件 | 期待挙動 |
+|---|---|---|
+| 7.13.1 | open 時、初期 props `{ lat, lng, label }` を受け取った場合 | 地図中心が `(lat, lng)` に、ピンも同位置、label input に初期値 |
+| 7.13.2 | 初期 props 無しで open | 地図中心は **東京駅** (`35.681236, 139.767125`)、ピンは中央、label input 空 |
+| 7.13.3 | 検索 input に文字を入力 | 500ms debounce 後 Nominatim `/search?format=json&q=<encoded>&limit=8&accept-language=ja` を fetch (User-Agent: `OMATASE-demo/1.0 (+https://omatase-demo.appily.run)`、Referer は browser 自動) |
+| 7.13.4 | 連続入力 (前の fetch 未完了で次の入力) | `AbortController.abort()` で前 request キャンセル、最新のみ採用 |
+| 7.13.5 | Nominatim レスポンス 8 件 | input 下にリスト表示 (`display_name` を 1 行 truncate)。タップで地図中心とピンを `(lat, lon)` に移動、label input に `display_name` 先頭 60 文字を auto-fill |
+| 7.13.6 | Nominatim から 0 件 | リストに「該当なし」表示、地図は動かさない |
+| 7.13.7 | Nominatim fetch エラー (network / 5xx / timeout 10s) | リスト下に「検索できませんでした」テキスト + リトライリンク表示。地図は動かさない |
+| 7.13.8 | 「📍 現在地を使う」チップタップ | `navigator.geolocation.getCurrentPosition` を呼ぶ。`timeout: 8000, enableHighAccuracy: false`。成功 → 地図中心とピンを `(coords.latitude, coords.longitude)` に、label input は **空のまま** (ユーザーに手動入力させる) |
+| 7.13.9 | geolocation 失敗 (PERMISSION_DENIED / POSITION_UNAVAILABLE / TIMEOUT) | toast「現在地を取得できませんでした」、地図は動かさない |
+| 7.13.10 | 地図上のピン (`<Marker draggable>`) を drag end | 新しい `(lat, lng)` を内部 state へ反映、label は変更しない (検索 or 手入力で確定する規約) |
+| 7.13.11 | label input を手動編集 | `(lat, lng)` は変更しない |
+| 7.13.12 | 決定ボタンタップ、label 空文字 | `400`/`400` 相当の inline error 「場所のラベルを入力してください」、close しない |
+| 7.13.13 | 決定ボタンタップ、label 1 文字以上、`(lat, lng)` 確定 | `onResolve({ lat, lng, label })` 呼び出し → close。呼び出し側が状態保持 |
+| 7.13.14 | cancel (overlay/ESC/×) | `onResolve` は呼ばれず close (=破棄)。確認 prompt は出さない (検索操作は破棄して良い軽さ) |
+| 7.13.15 | open 中の地図表示は `<MapSection>` 流用。leaflet z-index は §3.6 規約により `z-[1110]` (Sheet stack level 2) |
+
+#### 7.13.16 Nominatim Usage Policy 順守 (server 側ヘルパは置かない)
+
+- Nominatim public API は **1 req/sec** が上限、運用者ヘッダ (User-Agent / Referer) が必要
+- 本 MVP は **デモ規模** (同時数十アクセス、検索頻度低) のため client 直叩きで規約内に収まる前提
+- debounce 500ms + AbortController で実質「ユーザー 1 人 max 2 req/sec」、複数同時利用も低トラフィック想定で許容
+- Phase 2 で本格運用に入る場合は **server proxy + cache** を `/api/geocode/search` として追加 (`PROXY: Nominatim`) し、client は自社 endpoint を叩く形に切替
 
 ---
 
@@ -1191,7 +1308,18 @@ export const requireHost: (eventIdParam: string) => MiddlewareHandler<AppEnv> =
 - §7 の各行に最低 1 テスト
 - §7.11 invalidate マトリクスは、`vi.fn()` で `invalidateQueries` を mock してマトリクス通り呼ばれるか assert (各 mutation hook につき 1 it)。inline `useMutation` 禁止 (§7.11) なので `useApi.ts` の named export を `import * as api` で読み込んで spy する
 - §7.10 polling 検証 (`polling.test.tsx`) は `refetchIntervalInBackground` / `staleTime` が options object の own property として存在することを assert (§7.10 検証粒度参照)
+- §7.12 共通モーダル/Sheet 挙動: `<Modal>` / `<Sheet>` 基底コンポーネントの **3 経路 close** (overlay/ESC/×) は基底 1 セットで網羅、個別 Sheet (ScheduleEditSheet 等) では再検証しない (基底テストでカバー)
+- §7.13 LocationPickerSheet: Nominatim fetch は `vi.spyOn(global, "fetch")` で mock、AbortController が `signal` を request に渡していることを assert (前 request キャンセル経路)
+- §7.5.10-13 ChecklistDoneBanner: host vs member 視点、dismiss → sessionStorage 書き込み、featureId 変化で復活、の 3 it
+- §12.4.1 PeriodBanner: sameDay / 複数日 / 月またぎ / period=null の 4 it
+- §7.9.7-9 Schedule カード tap edit: host/member/delete 3 経路
 - snapshot テストは使わない
+
+#### 9.4.2 Touch target サイズ検証
+
+§3.5 規約 (最小 44×44pt) の検証は **クラス名検査** で代用 (jsdom では実 size 0、§9.3 ガイドラインに準拠):
+- 主要 + ボタン / × ボタン / 主要 CTA の DOM が `min-w-11 min-h-11` (Tailwind 11 = 44px) を含むか class 属性で assert
+- Reviewer は `data-testid` で各ボタンを特定し `expect(el.className).toMatch(/min-h-11|min-h-12|min-h-14/)` で検査
 
 #### 9.4.1 TanStack Query v5 型の使い分け
 
@@ -1304,6 +1432,18 @@ dist
 | **QR 出欠の QR コード生成** | MVP は「到着しました」ボタンで集合チェックインに統一 (旧 mock の QR 出欠を吸収・簡略化)。QR は ShareSheet (URL 共有) のみで使う |
 | **factory pattern (server side `createApp(deps)`)** | Reviewer 接続点を増やすだけ。テスト DB は `process.env.DATABASE_URL` 切替で対応 ([app export gotcha](../../../knowledge/gotcha/design-must-specify-app-export-path-for-tests.md)) |
 | **react-leaflet を `dynamic import`** | バンドル ~150KB で許容範囲。初回 load 体感差なし |
+| **Schedule 編集モーダル内の「機能 ON/OFF トグル一覧」UI** | Touri 実機 (2026-05-26) で「イメージ違った」「機能追加が分かりにくい」と却下。`+` → 機能一覧 Sheet → カード tap で追加、追加済 Feature は親 Sheet 内のカードで表示し tap で設定モード Sheet を開く方式に置換 (§12.6) |
+| **Schedule 保存と同時に Feature を作る/消す (deferred commit)** | Sheet 内 Sheet (Schedule edit > Feature settings) の取り消し意味論が複雑化、楽観更新の rollback 経路が増える。Feature 単位で即時 commit (§12.6.3) に統一 |
+| **Schedule 一覧の行を tap 不可 (旧設計の「`+` のみ tap」)** | Touri 実機で「クリックして編集したいところもできない」指摘。全行カード化、host=edit / member=readonly Sheet を分岐 (§7.9.7-8) |
+| **イベント名直下の期間表示なし (旧設計)** | Touri 実機で「日表示がないからいつなのかよくわからない」指摘。`<PeriodBanner>` を常設、`progress.period` / `event.period` を source とする (§12.4.1) |
+| **モーダル overlay tap で close しない (個別実装に任せる)** | 「空白部分タップで戻れない」体感悪化を回避。`<Sheet>` / `<Modal>` 基底で overlay/ESC/× の 3 経路を強制 (§3.6, §12.13) |
+| **`+` ボタンの sizing 個別判断** | 「+ ボタンも小さい」体感悪化。タッチ規約で min 44pt、主要 CTA は 48pt を強制 (§3.5) |
+| **持ち物全員完了 Push 通知** | server-side push / WebSocket を入れない MVP 縛り。`/progress` の polling 結果 (FeatureSummaryDTO.allMembersDone) でバナー描画する画面内通知に統一 (§7.5.11) |
+| **集合の QR 出欠** | MVP は「到着しました」ボタンで集合チェックインに統一 (§12.7.2)。QR 生成は ShareSheet (URL 共有) のみ。Phase 2 で QR 出欠を入れる場合は Feature config の枝として追加可 |
+| **Nominatim を server proxy 経由で叩く (MVP)** | デモ規模 (低トラフィック) + Phase 2 で proxy 化容易のため client 直叩きで開始 (§7.13.16)。本格運用化のタイミングで `/api/geocode/search` 追加 |
+| **Reverse geocode (ピン drag で住所自動 fill)** | Nominatim reverse は 1 req/sec 制約がより厳しい、ピン drag の頻度と相性悪い。MVP は「検索で選ぶ or 手入力」のみ、reverse は Phase 2 |
+| **モーダルの dismiss 制御を route param に乗せる** | URL 共有性は不要 (戻る/閉じるは js state で十分)。複雑化を避けて props ベースに統一 |
+| **schedule 編集を別画面 (`/e/:eventId/schedule/:sid/edit`) にする** | 操作の連続性 (機能追加 → 設定 → 場所選択) は Sheet 重ね (stackLevel) の方が breadcrumb 不要で速い。深い navigation を回避 |
 
 ---
 
@@ -1367,29 +1507,33 @@ dist
 │ ← 戻る                  │
 │ 集合場所と時間          │
 │                         │
+│ ── 集合場所 ──────────  │
 │ ┌─────────────────────┐ │
-│ │                     │ │
-│ │      <Map>          │ │  ← 240px、ピン (中央) ドラッグで lat/lng
-│ │                     │ │
+│ │   <Map preview>     │ │  ← tap で <LocationPickerSheet> を open
+│ │   📍 (未設定)         │ │     (高さ 180px、tap target 全面)
 │ └─────────────────────┘ │
-│ 📍 東京駅 丸の内中央口  │  ← Reverse geocode (Phase 2)、MVP は手入力
+│ 場所未設定 (タップで設定)│  ← label/lat/lng 未設定時の placeholder
 │                         │
-│ 集合時刻                │
+│ ── 集合時刻 ──────────  │  ← 縦並び。横並びはモバイル 375 で溢れる
+│ 開始                    │
 │ ┌─────────────────────┐ │
-│ │ 2026-06-01  10:00   │ │  ← <input type="datetime-local">
+│ │ 2026-06-01  10:00   │ │  ← <input type="datetime-local">、min-h-12
 │ └─────────────────────┘ │
-│ 終了予定                │
+│ 終了                    │
 │ ┌─────────────────────┐ │
 │ │ 2026-06-01  10:30   │ │
 │ └─────────────────────┘ │
 │                         │
 │ ┌───────────────────┐   │
-│ │   イベントを開始   │  │  ← brand-500
+│ │   イベントを開始   │  │  ← brand-500 / min-h-12 / 場所未設定の時 disabled
 │ └───────────────────┘   │
 └─────────────────────────┘
 ```
 
-挙動: 送信時 `POST /api/events/:eventId/schedules { name: "集合", startAt, endAt, location: {lat,lng,label} }` + その schedule に対し `POST /api/schedules/:sid/features { kind: "meetup", config: { kind:"meetup", location: { inherit: true }, checkInEnabled: true } }` → `/e/:eventId` (ホーム) へ。
+挙動:
+- 地図プレビューカード全面 tap で `<LocationPickerSheet>` (§12.12) を open。`onResolve({lat,lng,label})` で内部 state に保存、プレビューに `📍 {label}` 反映
+- 「イベントを開始」押下時、場所 (lat,lng,label) と時刻 2 つが揃っていなければ disabled
+- 送信時 `POST /api/events/:eventId/schedules { name: "集合", startAt, endAt, location: {lat,lng,label} }` + その schedule に対し `POST /api/schedules/:sid/features { kind: "meetup", config: { kind:"meetup", location: { inherit: true }, checkInEnabled: true } }` → `/e/:eventId` (ホーム) へ
 
 ### 12.4 `/e/:eventId` イベントホーム (管理者版)
 
@@ -1397,7 +1541,8 @@ Figma 02 右から 2 列目に対応。
 
 ```
 ┌─────────────────────────┐
-│ 大阪旅行           [⋯]  │  ← 22px font-bold、[⋯] で「URL共有」「設定」
+│ 大阪旅行           [⋯]  │  ← 22px font-bold、[⋯] は 44×44pt、URL共有/設定
+│ 5月20日 10:00 ~ 24日 17:00│ ← <PeriodBanner>、ink-500 text-sm、tabular-nums
 │                         │
 │ ── アナウンス ─────────  │  ← セクション見出し ink-500
 │ ┌─────────────────────┐ │
@@ -1405,36 +1550,52 @@ Figma 02 右から 2 列目に対応。
 │ └─────────────────────┘ │
 │             [ 送信 ]    │
 │                         │
-│ ── スケジュール  + ──── │  ← `+` で Schedule 編集 Sheet を開く
+│ ── スケジュール  [ + ] ─│  ← `+` は 44×44pt、tap で <ScheduleEditSheet mode="create">
 │ ┌─────────────────────┐ │
-│ │ 10:00 東京駅集合    │ │  ← 完了未完了でアイコン違う
+│ │ 10:00 東京駅集合  >│  │  ← カード行高 64px、全面 tap可、active で bg-brand-100
+│ ├─────────────────────┤ │     (host = mode="edit"、member = mode="readonly")
 │ │ 14:00 ホテルチェックイン│ │
-│ │ 18:00 居酒屋        │ │
+│ ├─────────────────────┤ │
+│ │ 18:00 居酒屋      >│  │
 │ └─────────────────────┘ │
 │                         │
 │ ── メンバー ─────────── │
-│ ◯◯◯◯◯ +5             │  ← <Avatar> 横並び
+│ ◯◯◯◯◯ +5             │  ← <Avatar> 横並び、各 44×44pt
 │                         │
 │ ── チャット ─────────── │
 │ ┌─────────────────────┐ │
 │ │ 〔メッセージリスト〕│ │  ← 5s polling
 │ │ ┌──────────┐ ┌────┐ │ │
-│ │ │ 入力     │ │送信│ │ │
+│ │ │ 入力(min-h-12)│送信│ │
 │ │ └──────────┘ └────┘ │ │
 │ └─────────────────────┘ │
 │                         │
-│ [▶ 進行を見る]          │  ← active schedule あり時のみ表示、`/progress` へ
+│ [▶ 進行を見る]          │  ← active schedule あり時のみ表示、min-h-12、`/progress` へ
 └─────────────────────────┘
 ```
 
+#### 12.4.1 PeriodBanner フォーマット規約
+
+`progress.period` (PeriodSummaryDTO) もしくは `event` レスポンスの `period` を入力に、`Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Tokyo" })` で整形:
+
+| 入力 | 表示例 |
+|---|---|
+| `period=null` (schedule 0 件) | バナー自体を **表示しない** |
+| `sameDay=true` (同日) | `5月20日 10:00 ~ 17:00` (終了側は時刻のみ) |
+| `sameDay=false` (複数日) | `5月20日 10:00 ~ 5月24日 17:00` |
+| 月またぎ複数日 | `12月31日 22:00 ~ 1月1日 02:00` (年表示はしない、MVP 1年内デモ前提) |
+| `startAt === endAt` (`endAt ≦ startAt` は server で 409 弾くため発生せず) | — |
+
+ロケール: 日本語固定。コロン区切りは半角 `:`、tabular-nums で時刻揃え。年表示なし (1 年以上跨ぐイベントは MVP 範囲外、年が必要になった時点で再設計)。
+
 ### 12.5 `/e/:eventId` イベントホーム (一般版)
 
-アナウンス textarea は **読み取り専用カード** に変わる。Schedule 一覧の `+` は出ない。それ以外は同じ。
+アナウンス textarea は **読み取り専用カード** に変わる。Schedule 一覧の `+` は出ない (host 専用)。Schedule カードは tap 可能だが `<ScheduleEditSheet mode="readonly">` で詳細表示のみ (§7.9.8)。`<PeriodBanner>` は host 版と同じく表示。それ以外は同じ。
 
 ```
 │ ── アナウンス ─────────  │
 │ ┌─────────────────────┐ │
-│ │ 明日だよー (host より)│ │  ← latest 1 件、`+` で過去 20 件モーダル展開
+│ │ 明日だよー (host より)│ │  ← latest 1 件、tap で過去 20 件モーダル展開
 │ └─────────────────────┘ │
 ```
 
@@ -1442,102 +1603,249 @@ Figma 02 右から 2 列目に対応。
 
 ### 12.6 Schedule 編集 Sheet `<ScheduleEditSheet>`
 
-Figma 02 中央列。Bottom Sheet 形式 (`rounded-t-3xl`、画面下 80% 占有)。
+Figma 02 中央列 + Touri 実機指摘の全面改修版。Bottom Sheet 形式 (§3.6 共通 `<Sheet>` を内部使用、`rounded-t-3xl`、画面下 90% 占有)。
 
 ```
 ┌─────────────────────────┐
-│ ──── スケジュール編集 ──│  ← 上端 grabber
-│            保存         │  ← 右上 (brand-500 text)
-│ 東京駅集合              │  ← title 入力 (大きめ text-2xl)
-│                         │
-│ ┌──────┐  ~  ┌──────┐  │  ← 開始 〜 終了 (datetime-local 2 つ)
-│ │開始  │     │終了  │   │
-│ └──────┘     └──────┘   │
-│                         │
-│ ── 集合場所 ──────────  │
+│  ━━━━ (grabber)         │  ← 上端、ドラッグで dismiss も可 (overlay 同等)
+│ [×] スケジュール編集 [保存]│  ← header min-h-14、[×] 44pt、[保存] 44pt brand-500
+├─────────────────────────┤
+│ タイトル                  │  ← label / ink-500 / font-medium
 │ ┌─────────────────────┐ │
-│ │    <Map>            │ │  ← 160px
-│ │ 📍 東京駅           │ │
+│ │ 東京駅集合          │ │  ← input、min-h-12、px-4、font-medium、ink-900
 │ └─────────────────────┘ │
 │                         │
-│ ── 機能を追加  + ────── │  ← 行ごとにトグル
-│ [集合]            (○──)│  ← トグル ON で meetup feature 追加
-│ [持ち物確認]      (──○)│
+│ 開始                     │  ← 縦並び固定。横並びは 375 で overflow
+│ ┌─────────────────────┐ │
+│ │ 2026-06-01  10:00   │ │  ← <input type="datetime-local">、min-h-12、w-full
+│ └─────────────────────┘ │
+│ 終了                     │
+│ ┌─────────────────────┐ │
+│ │ 2026-06-01  10:30   │ │
+│ └─────────────────────┘ │
+│                         │
+│ ── 場所 ──────────────  │
+│ ┌─────────────────────┐ │  ← カード全面 tap → <LocationPickerSheet> stackLevel=2
+│ │  <Map preview>      │ │     高さ 140px、ピン中心、tap 可
+│ │  📍 東京駅 中央口   │ │     未設定なら「タップして場所を設定」
+│ └─────────────────────┘ │
+│                         │
+│ ── 機能          [ + ] ─│  ← `+` は 44×44pt、tap で <FeatureCatalogSheet> stackLevel=2
+│ ┌─────────────────────┐ │
+│ │ 📍 集合           >│  │  ← Feature カード、行高 60px、全面 tap
+│ │   3/5 人が集合済み   │ │     → <FeatureSettingsSheet kind="meetup"> open (stackLevel=2)
+│ ├─────────────────────┤ │
+│ │ ☑ 持ち物確認      >│  │
+│ │   2/5 人完了        │ │
+│ └─────────────────────┘ │
+│ (空状態) 「+」で機能を追加 │  ← features 0 件時の placeholder
 │                         │
 │ ── 参加メンバー ─────── │
-│ ◉ 全員                  │  ← トグル
-│ ◯ 個別指定 → アバター   │
+│ ◉ 全員 (default)        │  ← radio。default 選択
+│ ◯ 個別指定 → アバター   │     ← 選択で下にメンバー一覧 (chip)
 │                         │
 │ ── 概要・メモ ────────  │
 │ ┌─────────────────────┐ │
-│ │ textarea            │ │
+│ │ textarea (min-h 80px)│ │
+│ └─────────────────────┘ │
+│                         │
+│ ── (host のみ) ─────── │
+│ [このスケジュールを削除] │  ← danger 系、min-h-12、tap で confirm prompt
+└─────────────────────────┘
+```
+
+#### 12.6.1 ScheduleEditSheet モード分岐
+
+| props.mode | header 表示 | 編集可否 | 削除ボタン |
+|---|---|---|---|
+| `"create"` | 「新しいスケジュール」 | すべて編集可、Feature 追加可 | なし |
+| `"edit"` (host) | 「スケジュール編集」 | すべて編集可、Feature 追加/削除可 | あり |
+| `"readonly"` (member) | スケジュール名 | すべて読み取り専用、Feature カードは tap で `<MeetupSheet>` / `<ChecklistSheet>` を `mode="runtime"` で open | なし |
+
+`<Sheet>` 共通 close 経路 (§3.6: overlay/ESC/×) → `dismissConfirm` で「未保存変更あり」判定。判定基準は **「初期 props 値と現在の form state の deep equal」**、内容変更があれば `window.confirm("変更を破棄しますか?")` で確認。
+
+#### 12.6.2 タイトル / 時刻 / 場所
+
+- title input は `maxLength=80` (`schedule.name` 制約と一致)
+- 開始/終了の `datetime-local` 入力値は `new Date(value).toISOString()` で UTC 化して送信 (§6.1 規約)。client 側でも `endAt > startAt` を validate (inline error、送信前に弾く)
+- 場所カード tap → `<LocationPickerSheet>` (§12.12) を `stackLevel=2` で open。`onResolve({lat,lng,label})` で form state に反映、プレビュー更新
+- 場所未設定でも `保存` は可能 (`location: null` を送る)。Feature に `meetup + inherit:true` が存在する時のみ「場所が必須です」 inline error
+
+#### 12.6.3 機能セクション (Touri 要望の核心)
+
+- セクション header 右端の `+` ボタン (44×44pt、`bg-brand-100 text-brand-500 rounded-full`) tap で `<FeatureCatalogSheet>` (§12.6.4) open
+- features 配列が空の時、セクション本文に placeholder「`+` で機能を追加」を表示
+- features 配列の各要素は **Feature カード** として render:
+  - 行高 60px、全面 tap、active で `bg-brand-100`
+  - 左にアイコン (📍 集合 / ☑ 持ち物確認)、中央に kind 名 + 1 行サマリ (`{doneCount}/{totalMembers} 人が...`)、右に `>` chevron
+  - 長押し or 右端の `⋯` (44pt) で「削除」action
+- カード tap → `<FeatureSettingsSheet feature={feature} mode="config">` を `stackLevel=2` で open (§12.7 / §12.8 の config モードと統一)
+- Feature 追加/削除/設定変更はすべて **その場で API call** (Schedule 保存と非同期、楽観更新)。「Schedule 保存と同時に Feature を作る」旧仕様は廃止。理由: Sheet 内 Sheet の取り消し意味論を単純化 (Feature は確定保存、Schedule 本体のみ未保存判定)
+
+#### 12.6.4 FeatureCatalogSheet `<FeatureCatalogSheet>`
+
+新規 Bottom Sheet (stackLevel=2、画面下 50% 占有)。
+
+```
+┌─────────────────────────┐
+│  ━━━━                   │
+│ [×] 機能を追加          │
+├─────────────────────────┤
+│ ┌─────────────────────┐ │  ← カード行高 80px、tap で追加 + close
+│ │ 📍 集合              │ │
+│ │ 集合場所と出欠を管理 │ │  ← 短い説明 ink-500 text-sm
+│ ├─────────────────────┤ │
+│ │ ☑ 持ち物確認         │ │
+│ │ 全員のチェックリスト │ │
 │ └─────────────────────┘ │
 └─────────────────────────┘
 ```
 
 挙動:
-- `保存` で `POST` or `PATCH` (新規 / 編集分岐)
-- 機能トグル ON で **schedule 保存と同時** に feature が追加される (`POST /schedules/:sid/features`)、OFF で削除 (`DELETE`)。トグル UI 自体は楽観更新、失敗時 onError で rollback
-- 「集合」trigger は `kind=meetup`、`config.location.inherit=true` を初期値。詳細編集は `<MeetupSheet>` で
-- 「持ち物確認」trigger は `kind=checklist`、`config.items = []` 空で作る → `<ChecklistSheet>` で items 入力させる (空のまま `保存` は `400` で弾く)
+- カード tap → `POST /api/schedules/:sid/features` (`kind` に応じた初期 config を送る、§12.6.5)。成功で Sheet close + 親 (`ScheduleEditSheet`) の features 配列を invalidate
+- 同 kind を既に持つ schedule でも追加可 (Phase 1 では multi-instance を許す、UI 側で並列表示)
+- 既に追加済みのカードには「追加済」バッジ + tap 無効 (`disabled` 視覚)
 
-### 12.7 集合 Feature 詳細 Sheet `<MeetupSheet>`
+#### 12.6.5 Feature 追加時の初期 config
 
-Figma 01 左下のホテルチェックイン詳細 + Figma 02 左の「集合場所」セクションをハイブリッド。
+| kind | 初期 config | 追加直後の挙動 |
+|---|---|---|
+| `meetup` | `{ kind:"meetup", location:{inherit:true}, checkInEnabled:true }` | `POST` 成功 → 即座に `<MeetupSheet mode="config">` を open し詳細設定を促す (UX: 1 タップでカタログ→設定まで連続) |
+| `checklist` | `{ kind:"checklist", items:[{id:nanoid(), label:"", required:true}] }` (空項目 1 つ込み) | 同上 `<ChecklistSheet mode="config">` open。「空ラベルのまま保存」は `400` で server 弾き |
+
+### 12.7 集合 Feature Sheet `<MeetupSheet>`
+
+`<Sheet>` ベース。**1 コンポーネントで 2 モード** (`config` = host 設定 / `runtime` = 進行中の操作)。Touri 要望「機能をタップすると設定画面、進行ページでは出欠操作」の両立。
+
+#### 12.7.1 mode="config" (host のみ、ScheduleEditSheet から open)
 
 ```
 ┌─────────────────────────┐
-│ ←  集合 (meetup)        │
-│            保存         │  ← host: 編集モード時
-│                         │
+│  ━━━━                   │
+│ [×] 集合の設定    [保存] │
+├─────────────────────────┤
 │ ── 集合場所 ──────────  │
-│ ◉ Schedule の場所を継承 │  ← トグル
-│ ◯ 別の場所を指定        │  ← 選択で下に map + label 入力
-│ ┌─────────────────────┐ │
-│ │     <Map>           │ │
+│ ◉ Schedule の場所を継承 │  ← radio
+│ ◯ 別の場所を指定        │
+│ ┌─────────────────────┐ │  ← 「別の場所」選択時のみ表示。カード tap で
+│ │  <Map preview>      │ │     <LocationPickerSheet> stackLevel=2 open
 │ │  📍 東京駅 中央口    │ │
 │ └─────────────────────┘ │
 │                         │
-│ ── 到着しましたか? ──── │  ← member 視点 UI、host も同じ
-│ ┌───────────────────┐   │
-│ │  到着しました      │  │  ← brand-500 button。押すと PUT state.checkedInAt
-│ └───────────────────┘   │
-│ あなたは到着済みです    │  ← state.checkedInAt 有りで表示変化
+│ ── 出欠機能 ──────────  │
+│ チェックイン            │
+│ [●━━━━] ON              │  ← toggle、`config.checkInEnabled`
+│ 各メンバーが「到着しました」│  ← 補足 ink-500 text-sm
+│ を押すと管理者画面で確認可│
 │                         │
-│ ── 集合状況 ──────────  │
-│ 3 / 5 人が集合済み      │  ← aggregate.checkedInCount / totalMembers
-│ ●●●○○                  │
+│ [このスケジュールから削除]│  ← danger 系、min-h-12、confirm prompt → DELETE
 └─────────────────────────┘
 ```
 
-### 12.8 持ち物確認 Feature 詳細 Sheet `<ChecklistSheet>`
+挙動 (mode="config"):
+- `保存` で `PATCH /api/features/:id { config }`、close
+- 「別の場所を指定」radio 選択時に `<LocationPickerSheet>` を必須化 (lat/lng/label が空のまま保存しようとすると inline error)
+- 削除ボタンは `DELETE /api/features/:id` → 親 Sheet の features 配列 invalidate
+- `<Sheet>` 共通 close (§3.6): 未保存変更あれば confirm
 
-Figma 01 左に対応。
+#### 12.7.2 mode="runtime" (全員、進行ページ or member の readonly Schedule カードから open)
 
 ```
 ┌─────────────────────────┐
-│ ←  持ち物確認 (checklist)│
-│            保存         │  ← host: 編集モード時のみ
+│  ━━━━                   │
+│ [×] 集合                 │
+├─────────────────────────┤
+│ ── 集合場所 ──────────  │
+│ ┌─────────────────────┐ │  ← 読み取り専用 map preview (tap で picker 開かない)
+│ │  <Map>              │ │
+│ │  📍 東京駅 中央口    │ │
+│ └─────────────────────┘ │
 │                         │
-│ ── リスト編集 (host) ── │  ← host のみ、member は非表示
-│ □ パスポート          ✕│  ← 行ごとに ✕ 削除
-│ □ 充電器              ✕│
-│ + アイテムを追加        │
+│ ── あなたの状態 ──────  │  ← config.checkInEnabled=true の時のみ表示
+│ ┌───────────────────┐   │
+│ │  到着しました       │  │  ← brand-500、min-h-14 / 大きめ
+│ └───────────────────┘   │     state.checkedInAt 有りなら「あなたは到着済み (10:08)」表示
 │                         │
-│ ── あなたのチェック ─── │  ← 全員表示
-│ ☑ パスポート            │  ← タップで PUT state.checked[id]
-│ ☐ 充電器                │
+│ ── 集合状況 ──────────  │
+│ 3 / 5 人が集合済み       │
+│ ●●●○○                  │  ← progress bar
 │                         │
-│ ── 全員の進捗 ────────  │
-│ 2 / 5 人が完了           │  ← aggregate.doneCount / totalMembers
-│ パスポート  4/5         │  ← perItem (host のみ表示)
-│ 充電器      3/5         │
+│ (host のみ) 未到着メンバー │
+│ ◯ さとう ◯ たなか        │  ← Avatar + 名前、tap で何もしない (MVP)
 └─────────────────────────┘
 ```
 
-挙動:
-- host のみ items の編集可、member は自分の `state.checked` 操作のみ可
-- 「完了 (全アイテム済)」判定は `required=true` 全てが true。`required=false` は集計対象外 (§7.5.6)
+挙動 (mode="runtime"):
+- 「到着しました」 → `PUT /api/features/:id/state { state: { kind:"meetup", checkedInAt: Date.now() } }`、楽観更新
+- 既に到着済みの場合、ボタンは「取り消し」(checkedInAt: null に上書き) に切替。誤タップ救済
+- close は §3.6 共通
+
+### 12.8 持ち物確認 Feature Sheet `<ChecklistSheet>`
+
+`<Sheet>` ベース。**1 コンポーネントで 2 モード** (`config` / `runtime`)。Touri 要望「項目入力 → ブロック追加の流れ」+「全員チェック完了 → 管理者通知」を反映。
+
+#### 12.8.1 mode="config" (host のみ、ScheduleEditSheet から open)
+
+```
+┌─────────────────────────┐
+│  ━━━━                   │
+│ [×] 持ち物確認の設定 [保存]│
+├─────────────────────────┤
+│ ── チェックリスト ──── │
+│ ┌─────────────────────┐ │
+│ │ パスポート        ✕│  │  ← 行高 56px、ラベル inline edit、✕ で削除 (44pt)
+│ ├─────────────────────┤ │
+│ │ 充電器            ✕│  │
+│ ├─────────────────────┤ │
+│ │ ＋ 新しいアイテム   │ │  ← 末尾の入力行 (inline input)、Enter or [追加] で確定
+│ │   ┌─────────┐ [追加]│ │     確定後この行が「項目」化、新しい入力行が下に出現
+│ │   │         │       │ │
+│ │   └─────────┘       │ │
+│ └─────────────────────┘ │
+│                         │
+│ [このスケジュールから削除]│
+└─────────────────────────┘
+```
+
+挙動 (mode="config"):
+- 既存項目: ラベル click で inline 編集モード (input)、blur or Enter で確定 (PATCH 即時送信、楽観更新)
+- ✕ で行削除 (confirm なし、楽観更新、誤削除は再追加で救済)
+- 末尾の `＋ 新しいアイテム` 入力欄:
+  - 入力後 Enter or `[追加]` ボタン (44pt brand-500) で `items` 配列末尾に push、新しい空入力行が下に出現
+  - 空文字のままでは `[追加]` は disabled
+- 全項目編集は **`PATCH /api/features/:id { config: { ...items } }`** で都度送信 (`保存` ボタンは header にも残し、明示的な確定経路も提供)
+- 1 件以上の項目があれば保存可。0 件で保存は server 側 `400` (zod min(1))
+- `required` flag は MVP では UI から触らず、すべて `required=true` 固定 (集計の混乱を避ける)。Phase 2 で項目別 optional 化可
+
+#### 12.8.2 mode="runtime" (全員)
+
+```
+┌─────────────────────────┐
+│  ━━━━                   │
+│ [×] 持ち物確認            │
+├─────────────────────────┤
+│ ── あなたのチェック ─── │
+│ ┌─────────────────────┐ │
+│ │ ☑ パスポート         │ │  ← 行高 56px、全面 tap で PUT state.checked[id]
+│ ├─────────────────────┤ │     楽観更新、active で bg-brand-100
+│ │ ☐ 充電器             │ │
+│ └─────────────────────┘ │
+│ あなたは全て完了です ✓  │  ← 自分の checked が全 required=true で表示
+│                         │
+│ ── 全員の進捗 ────────  │
+│ 2 / 5 人が完了           │
+│ ●●○○○                  │  ← progress bar
+│ (host のみ) per-item:    │
+│  パスポート  4/5         │  ← config.items の順に表示
+│  充電器      3/5         │
+└─────────────────────────┘
+```
+
+挙動 (mode="runtime"):
+- チェック tap → `PUT /api/features/:id/state { state: { kind:"checklist", checked: {...} } }` (差分でなく全体送信、MVP 簡素)
+- 「完了 (全アイテム済)」判定は §7.5.6: `required=true` 全てが true
+- close は §3.6 共通
+- **全員完了時**は §7.5.11 により host の進行ページ上部に `<ChecklistDoneBanner>` が出る (この Sheet 内では出さない、進行ページ責務)
 
 ### 12.9 進行ページ `/e/:eventId/progress`
 
@@ -1547,22 +1855,25 @@ Figma 03 全体に対応。`current` が null かどうかで 3 状態。
 
 ```
 ┌─────────────────────────┐
-│ 大阪旅行         [⌂]    │  ← [⌂] でホームへ (host のみ)
+│ 大阪旅行         [⌂]    │  ← [⌂] 44pt、host のみ、ホームへ
 │ 現在のスケジュール       │  ← ink-500 text-sm
 │ 東京駅集合      10:00   │  ← text-3xl font-bold + 時刻 (tabular-nums)
+│                         │
+│ ┌─ ✓ 持ち物確認 全員完了!─┐│ ← <ChecklistDoneBanner>、host のみ、§7.5.11
+│ │ タップで詳細  [×dismiss]│ │     dismiss 押下で sessionStorage 記録 (§7.5.13)
+│ └─────────────────────┘ │
 │                         │
 │ ┌── Announcement ─────┐│
 │ │ 明日だよー          │  │ ← latest 1、tap で全件 modal
 │ └─────────────────────┘ │
 │                         │
-│ ── 機能 ─────────────── │  ← chip 横並び、tap で各 Sheet
-│ [📍 集合] [☑ 持ち物]    │
-│                         │
-│ ┌─ 集合 (折りたたみ) ──┐│
-│ │  3/5 人集合済み       │ ← summary 表示、tap で Sheet 開く
-│ └─────────────────────┘ │
-│ ┌─ 持ち物 ─────────────┐│
-│ │  2/5 人完了          │
+│ ── 機能 ─────────────── │
+│ ┌─────────────────────┐ │
+│ │ 📍 集合           >│  │  ← Feature カード行高 72px、全面 tap
+│ │   3/5 人集合済み      │ │     → <MeetupSheet mode="runtime"> open
+│ ├─────────────────────┤ │
+│ │ ☑ 持ち物確認      >│  │  ← summary 行表示
+│ │   2/5 人完了 (✓完了) │ │     → <ChecklistSheet mode="runtime"> open
 │ └─────────────────────┘ │
 │                         │
 │ ── 次の Schedule ───── │
@@ -1573,9 +1884,17 @@ Figma 03 全体に対応。`current` が null かどうかで 3 状態。
 │ │ (schedule chat 2s)  │ │
 │ └─────────────────────┘ │
 │                         │
-│ [← 前へ]   [完了]  [次→]│  ← 前/次は host/member 両方、完了は誰でも
+│ [← 前へ]   [完了]  [次→]│  ← 各ボタン 48×48pt 以上、完了は誰でも押せる
 └─────────────────────────┘
 ```
+
+`<ChecklistDoneBanner>` 詳細仕様:
+- 表示条件: §7.5.11 (host 視点、`current.features` 中に kind=checklist かつ allMembersDone=true な feature が 1 件以上)
+- 該当 feature 複数なら、上から positon 順に **複数枚** banner を積む (overflow しないよう各 banner は 1 行 56px)
+- 配色: `bg-success/10 text-success border border-success/30 rounded-2xl`
+- 左に ✓ アイコン、中央に「{kind 名} 全員完了!」、右に `[×]` (44pt) dismiss
+- バナー本体 tap → 該当 `<ChecklistSheet mode="runtime">` open (進行ページの Feature カード tap と同じ経路)
+- dismiss: sessionStorage `dismissed_<featureId>=true` 立てて再表示しない (§7.5.13)。次の current schedule では featureId が変わるため復活
 
 #### 12.9.2 イベント開始前 (current=null, next あり)
 
@@ -1637,6 +1956,108 @@ Figma 03 全体に対応。`current` が null かどうかで 3 状態。
 
 挙動: 送信時 `signInAsGuest(name)` → `POST /api/events/:eventId/join` → `/e/:eventId` (event hub) へ。既ログイン (anonymous) かつ別 event の場合は同じユーザーで join のみ実行。
 
+### 12.12 LocationPickerSheet `<LocationPickerSheet>` (共通)
+
+Touri 要望「場所選択が困難すぎる。地図表示をクリックしたら独立モーダルで場所検索 → 決定」の核心。`/create/where` / `<ScheduleEditSheet>` / `<MeetupSheet mode="config">` から共通呼び出し。
+
+```
+┌─────────────────────────┐
+│  ━━━━                   │
+│ [×] 場所を選ぶ    [決定] │
+├─────────────────────────┤
+│ ┌─────────────────────┐ │
+│ │ 🔍 場所を検索        │ │  ← input、min-h-12、debounce 500ms → Nominatim
+│ └─────────────────────┘ │
+│ [📍 現在地を使う]        │  ← chip、44pt、tap で navigator.geolocation
+│                         │
+│ ── 検索結果 ──────────  │  ← Nominatim result があれば表示、最大 8 件
+│ ┌─────────────────────┐ │
+│ │ 東京駅 (千代田区..)  │  ← 1 行 60px、tap で地図中心 + label auto-fill
+│ ├─────────────────────┤ │
+│ │ 東京タワー (港区..)  │
+│ └─────────────────────┘ │
+│                         │
+│ ── 地図 ─────────────── │
+│ ┌─────────────────────┐ │
+│ │   <MapSection>      │ │  ← 高さ 260px (大きめ、操作優先)
+│ │      📍 (draggable)  │ │     ピンを drag で (lat,lng) 微調整可
+│ └─────────────────────┘ │
+│                         │
+│ ── 場所のラベル ──────  │
+│ ┌─────────────────────┐ │
+│ │ 東京駅 丸の内中央口  │ │  ← input、検索選択で auto-fill、手動編集可
+│ └─────────────────────┘ │
+└─────────────────────────┘
+```
+
+API:
+```ts
+interface LocationPickerSheetProps {
+  open: boolean;
+  initial?: { lat: number; lng: number; label: string } | null;
+  onResolve: (result: { lat: number; lng: number; label: string }) => void;  // 決定
+  onDismiss: () => void;                                                       // cancel
+}
+```
+
+挙動: §7.13 にすべて記述 (Nominatim 仕様、AbortController、現在地、ピン drag、label 必須など)。Reviewer は §7.13 をテスト根拠とする。
+
+### 12.13 Modal / Sheet 基底コンポーネント
+
+#### 12.13.1 `<Sheet>` (Bottom Sheet)
+
+```tsx
+// src/client/components/Sheet.tsx
+interface SheetProps {
+  open: boolean;
+  onDismiss: () => void;
+  title?: string;
+  rightAction?: { label: string; onClick: () => void; intent?: "primary"|"plain"; disabled?: boolean };
+  dismissConfirm?: () => boolean | Promise<boolean>;
+  stackLevel?: 1 | 2;       // default 1
+  children: React.ReactNode;
+}
+```
+
+DOM 構造 (固定):
+```
+<div role="presentation" data-testid="sheet-overlay" onClick={tryDismiss}>
+  <div role="dialog" aria-modal="true" data-testid="sheet">
+    <header>
+      <button data-testid="sheet-close" aria-label="閉じる" onClick={tryDismiss}>×</button>
+      {title && <h2>{title}</h2>}
+      {rightAction && <button data-testid="sheet-action" onClick={rightAction.onClick}>{rightAction.label}</button>}
+    </header>
+    <div className="sheet-body">{children}</div>
+  </div>
+</div>
+```
+
+- overlay tap → `tryDismiss` (内部で `dismissConfirm` 確認 → 通れば `onDismiss`)
+- ESC → window keydown listener、同じく `tryDismiss`
+- × tap → 同上
+- focus trap: open 直後に最初の focusable 要素に focus、Tab で内部を循環
+- body scroll lock: open 中 `document.body.style.overflow = "hidden"`、close で復帰
+- z-index: stackLevel=1 → overlay 1099 / sheet 1100、stackLevel=2 → overlay 1109 / sheet 1110
+
+#### 12.13.2 `<Modal>` (中央配置 Dialog)
+
+`<Sheet>` と同じ Props / 同じ close 挙動。違いは配置のみ:
+- 画面中央配置 (`flex items-center justify-center`)
+- 最大幅 `max-w-md`、最大高 `max-h-[80vh]`
+- `rounded-2xl`、`rounded-t-3xl` ではない
+
+DOM 構造は `data-testid="modal"` / `data-testid="modal-overlay"` / `data-testid="modal-close"` で `<Sheet>` と区別。
+
+#### 12.13.3 利用ルール
+
+| 用途 | 推奨 |
+|---|---|
+| Schedule 編集 / Feature 設定 / 場所選択 / 機能一覧 (フォーム系、コンテンツ多め) | `<Sheet>` |
+| URL 共有 / 確認 prompt / アナウンス全件 / 警告系 (内容少なめ、中央配置適切) | `<Modal>` |
+
+`<ScheduleEditSheet>` `<FeatureCatalogSheet>` `<MeetupSheet>` `<ChecklistSheet>` `<LocationPickerSheet>` `<ShareSheet>` はすべて内部で **`<Sheet>` を using**。個別実装で close 経路を書かない。これにより §3.6 規約 (overlay/ESC/×) が一元担保される。
+
 ---
 
 ## 13. 画面遷移図 (mermaid)
@@ -1646,20 +2067,33 @@ stateDiagram-v2
   [*] --> Landing : /
   Landing --> Create : 「+ イベントを作る」
   Create --> CreateWhere : つぎへ (POST /events)
+  CreateWhere --> LocationPicker_1 : 地図カード tap
+  LocationPicker_1 --> CreateWhere : 決定/cancel
   CreateWhere --> EventHomeHost : イベント開始 (POST /schedules + features)
-  EventHomeHost --> ScheduleEditSheet : + or 行 tap
-  ScheduleEditSheet --> EventHomeHost : 保存 / 閉じる
+
+  EventHomeHost --> ScheduleEditSheet : + (新規) or 行カード tap (編集)
+  ScheduleEditSheet --> LocationPicker_2 : 場所カード tap (stackLevel=2)
+  LocationPicker_2 --> ScheduleEditSheet : 決定/cancel
+  ScheduleEditSheet --> FeatureCatalog : 機能 + tap (stackLevel=2)
+  FeatureCatalog --> FeatureSettings : 機能カード tap → 追加 + 設定モード open
+  ScheduleEditSheet --> FeatureSettings : 追加済 Feature カード tap (stackLevel=2)
+  FeatureSettings --> LocationPicker_3 : (Meetup config) 別の場所カード tap (stackLevel=2)
+  LocationPicker_3 --> FeatureSettings : 決定/cancel
+  FeatureSettings --> ScheduleEditSheet : 保存/cancel
+  ScheduleEditSheet --> EventHomeHost : 保存 / overlay/ESC/× で close (未保存なら confirm)
+
   EventHomeHost --> ShareSheet : ⋯ → URL共有
   ShareSheet --> EventHomeHost
   EventHomeHost --> ProgressPage : ▶ 進行 (active 時のみ)
-  ProgressPage --> FeatureSheet : feature chip tap
-  FeatureSheet --> ProgressPage
+  ProgressPage --> FeatureRuntime : Feature カード tap (Meetup/Checklist mode="runtime")
+  FeatureRuntime --> ProgressPage
   ProgressPage --> EventHomeHost : ⌂ (host のみ)
 
   Landing --> GuestJoin : 共有URL閲覧
   GuestJoin --> EventHomeMember : 参加 (signIn + join)
   EventHomeMember --> ProgressPage : auto redirect (active 時, non-host)
-  EventHomeMember --> ScheduleDetail : 行 tap (read only)
+  EventHomeMember --> ScheduleReadonly : 行カード tap (readonly)
+  ScheduleReadonly --> FeatureRuntime : Feature カード tap
 ```
 
 ---

@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/client.js";
 import { event, membership } from "../db/domain-schema.js";
-import { announcementDTOs, loadMembers, toEventDTO } from "../lib/dto.js";
+import { announcementDTOs, loadMembers, periodForEvent, toEventDTO } from "../lib/dto.js";
 import { AppError } from "../lib/error.js";
 import { getRoleOrThrow, requireUser } from "../lib/guard.js";
 import { makeId } from "../lib/id.js";
@@ -44,6 +44,7 @@ events.get("/:eventId", requireUser, async (c) => {
     event: toEventDTO(row, user.id),
     members: memberRow ? await loadMembers(eventId) : [],
     viewerIsMember: Boolean(memberRow),
+    period: await periodForEvent(eventId),
   });
 });
 
